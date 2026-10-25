@@ -37,6 +37,14 @@ data class ZenithUiState(
     val focusModeLabel: String = "DEEP WORK • 50:00"
 )
 
+private data class UserDbSnapshot(
+    val todaySnap: FullDaySnapshot?,
+    val rangeLogs: List<DailyLogEntity>,
+    val allSnaps: List<FullDaySnapshot>,
+    val badges: List<BadgeEntity>,
+    val timer: Pair<Boolean, Int>
+)
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class ZenithViewModel(
     private val dao: ZenithDao,
@@ -66,20 +74,26 @@ class ZenithViewModel(
             }
         } else {
             ensureUserInitialized(user.uid)
-            combine(
+            val userDbFlow = combine(
                 dao.observeDaySnapshot(user.uid, todayEpoch),
                 dao.observeLogsInRange(user.uid, startWindowEpoch, endWindowEpoch),
                 dao.observeAllDaySnapshotsDesc(user.uid),
                 dao.observeAllBadges(user.uid),
-                _timerState,
+                _timerState
+            ) { todaySnap, rangeLogs, allSnaps, badges, timer ->
+                UserDbSnapshot(todaySnap, rangeLogs, allSnaps, badges, timer)
+            }
+
+            combine(
+                userDbFlow,
                 _isAuthLoading,
                 _authErrorMessage,
                 _authSuccessMessage
-            ) { todaySnap, rangeLogs, allSnaps, badges, timer, loading, error, success ->
-                val overallStreak = calculateOverallStreak(rangeLogs)
-                val wakeStreak = calculateWakeStreak(rangeLogs)
-                val studyStreak = calculateStudyStreak(rangeLogs)
-                val readiness = calculateReadinessPercentage(rangeLogs)
+            ) { db, loading, error, success ->
+                val overallStreak = calculateOverallStreak(db.rangeLogs)
+                val wakeStreak = calculateWakeStreak(db.rangeLogs)
+                val studyStreak = calculateStudyStreak(db.rangeLogs)
+                val readiness = calculateReadinessPercentage(db.rangeLogs)
 
                 ZenithUiState(
                     currentUser = user,
@@ -90,15 +104,15 @@ class ZenithViewModel(
                     targetExamDate = examDate,
                     daysRemaining = ChronoUnit.DAYS.between(LocalDate.now(), examDate).coerceAtLeast(0),
                     transformationReadinessPercent = readiness,
-                    currentDaySnapshot = todaySnap,
-                    fourMonthHistory = rangeLogs,
-                    allLogsWithDetails = allSnaps,
-                    badges = badges,
+                    currentDaySnapshot = db.todaySnap,
+                    fourMonthHistory = db.rangeLogs,
+                    allLogsWithDetails = db.allSnaps,
+                    badges = db.badges,
                     overallStreakDays = overallStreak,
                     studyStreakDays = studyStreak,
                     wakeStreakDays = wakeStreak,
-                    isFocusTimerRunning = timer.first,
-                    activeFocusSeconds = timer.second
+                    isFocusTimerRunning = db.timer.first,
+                    activeFocusSeconds = db.timer.second
                 )
             }
         }
