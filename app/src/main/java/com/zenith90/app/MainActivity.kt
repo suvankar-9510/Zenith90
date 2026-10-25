@@ -67,6 +67,8 @@ class MainActivity : ComponentActivity() {
                         isLoading = state.isAuthLoading,
                         onSignIn = viewModel::signIn,
                         onSignUp = viewModel::signUp,
+                        onSignInWithGoogle = { viewModel.signInWithGoogle(this@MainActivity) },
+                        onContinueAsGuest = viewModel::signInAsGuest,
                         onContinueOffline = viewModel::continueOffline
                     )
                 } else {

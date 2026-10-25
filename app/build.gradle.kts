@@ -14,8 +14,8 @@ android {
         applicationId = "com.zenith90.app"
         minSdk = 28
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.2.0-pixel-firebase"
+        versionCode = 3
+        versionName = "1.3.0-pixel"
     }
 
     buildTypes {
@@ -71,4 +71,9 @@ dependencies {
     implementation("com.google.firebase:firebase-auth-ktx")
     implementation("com.google.firebase:firebase-firestore-ktx")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
+
+    // Google Credential Manager for Google Sign-In
+    implementation("androidx.credentials:credentials:1.3.0")
+    implementation("androidx.credentials:credentials-play-services-auth:1.3.0")
+    implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
 }

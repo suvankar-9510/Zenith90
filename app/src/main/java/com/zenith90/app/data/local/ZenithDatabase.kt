@@ -180,7 +180,7 @@ interface ZenithDao {
         WorkoutEntryEntity::class,
         BadgeEntity::class
     ],
-    version = 1,
+    version = 3,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -197,7 +197,11 @@ abstract class ZenithDatabase : RoomDatabase() {
                     context.applicationContext,
                     ZenithDatabase::class.java,
                     "zenith90_pixel.db"
-                ).build().also { INSTANCE = it }
+                )
+                .fallbackToDestructiveMigration()
+                .fallbackToDestructiveMigrationOnDowngrade()
+                .build()
+                .also { INSTANCE = it }
             }
         }
 

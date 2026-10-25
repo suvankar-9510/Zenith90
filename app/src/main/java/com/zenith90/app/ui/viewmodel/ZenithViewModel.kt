@@ -1,5 +1,6 @@
 package com.zenith90.app.ui.viewmodel
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.zenith90.app.data.local.*
@@ -82,7 +83,7 @@ class ZenithViewModel(
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
-        initialValue = ZenithUiState()
+        initialValue = ZenithUiState(userProfile = authManager.userState.value)
     )
 
     init {
@@ -140,7 +141,25 @@ class ZenithViewModel(
     }
 
     fun continueOffline(name: String) {
-        authManager.continueInOfflineMode(name = name)
+        viewModelScope.launch {
+            authManager.continueInOfflineMode(name = name.ifBlank { "Scholar" })
+        }
+    }
+
+    fun signInAsGuest() {
+        viewModelScope.launch {
+            _authMeta.value = Triple(null, true, null)
+            val res = authManager.signInAsGuest()
+            _authMeta.value = Triple(res.exceptionOrNull()?.localizedMessage, false, null)
+        }
+    }
+
+    fun signInWithGoogle(context: Context) {
+        viewModelScope.launch {
+            _authMeta.value = Triple(null, true, null)
+            val res = authManager.signInWithGoogle(context)
+            _authMeta.value = Triple(res.exceptionOrNull()?.localizedMessage, false, null)
+        }
     }
 
     fun triggerCloudSync() {

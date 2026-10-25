@@ -49,25 +49,32 @@ jobs:
             echo "Found APK at $APK_PATH"
             cp "$APK_PATH" ./zenith90-debug.apk
             
-            # Publish to v1.2.0-pixel release
-            gh release delete v1.2.0-pixel --yes || true
-            gh release create v1.2.0-pixel ./zenith90-debug.apk \
-              --title "Zenith90 v1.2.0 Pixel Preview (Debug APK)" \
-              --notes "### ⚡ Zenith90 v1.2.0 Instant Pixel APK
+            # Publish to v1.3.0-pixel release
+            gh release delete v1.3.0-pixel --yes || true
+            gh release create v1.3.0-pixel ./zenith90-debug.apk \
+              --title "Zenith90 v1.3.0 Pixel Preview (Debug APK)" \
+              --notes "### ⚡ Zenith90 v1.3.0 Instant Pixel APK
               
               Automated build compiled via GitHub Actions.
               
-              #### What's Included:
-              - **Material 3 Pixel OLED Design**: True obsidian theme with tactile haptics & adaptive icon.
-              - **Firebase Auth & Cloud Sync**: Seamless login, register, cloud synchronization & offline bypass.
-              - **Workout Tracker**: Log sets, reps, and loads for Gym Hypertrophy & Calisthenics.
-              - **Study Habit Booster**: Focus Pomodoro timer and quick +25m/+50m increments.
-              - **Immutable Vault**: 120-day heatmap, milestone badges & daily 1-line audit logs.
+              #### What's Fixed & Added:
+              - **Resilient Authentication**: Seamless email & password sign-up/sign-in with auto-fallback.
+              - **Google Sign-In**: Integrated Google Credential Manager with sandbox fallback.
+              - **One-Tap Guest Mode**: Instant guest access with local Room storage.
+              - **Brand New Logo**: Added custom geometric Zenith90 vector logo mark and adaptive icons.
+              - **Clean Database Migrations**: Upgraded to DB v3 with destructive migrations for clean upgrades.
               
               #### Direct Download & Testing:
               1. Download **\`zenith90-debug.apk\`** on your Android device.
               2. Open file and confirm install (allow 'Install Unknown Apps' if prompted).
               3. Launch **Zenith90**!" \
+              --prerelease
+
+            # Also update v1.2.0-pixel and v1.0.0-preview for backwards-compatible download links
+            gh release delete v1.2.0-pixel --yes || true
+            gh release create v1.2.0-pixel ./zenith90-debug.apk \
+              --title "Zenith90 v1.3.0 Pixel Preview (Debug APK)" \
+              --notes "Updated to Zenith90 v1.3.0 with Brand Logo, Google Sign-In & Guest Mode." \
               --prerelease
             
             # Also update v1.0.0-preview for backwards-compatible download links
