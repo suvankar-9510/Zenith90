@@ -44,12 +44,7 @@ jobs:
           APK_PATH=$(find app/build/outputs/apk/debug -name "*.apk" | head -n 1)
           if [ -f "$APK_PATH" ]; then
             echo "Found APK at $APK_PATH"
-            # Rename or copy for cleaner release asset naming
             cp "$APK_PATH" ./zenith90-debug.apk
-            
-            # Delete release if exists, or update it
-            gh release delete v1.0.0-preview --yes || true
-            git push --delete origin v1.0.0-preview || true
             
             gh release create v1.0.0-preview ./zenith90-debug.apk \
               --title "Zenith90 v1.0.0 Preview (Debug APK)" \
@@ -61,7 +56,8 @@ jobs:
               1. Download **\`zenith90-debug.apk\`** below on your Android device.
               2. Open the downloaded file and allow 'Install from Unknown Sources' if prompted.
               3. Launch **Zenith90** to begin testing!" \
-              --prerelease
+              --prerelease \
+              --clobber
           else
             echo "Error: APK not found!"
             exit 1
