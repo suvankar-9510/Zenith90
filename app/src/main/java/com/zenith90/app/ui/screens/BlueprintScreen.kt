@@ -288,7 +288,7 @@ fun BlueprintScreen(
                         SuggestionChip(
                             onClick = {
                                 PixelHaptics.crispTick(view)
-                                onSaveBlock(activeEpochDay, 990, 60, "Physical Conditioning Session", "WORKOUT", BlockCategory.TRAINING, TaskPriority.MEDIUM)
+                                onSaveBlock(activeEpochDay, 990, 60, "Physical Conditioning Session", "WORKOUT", BlockCategory.WORKOUT, TaskPriority.MEDIUM)
                             },
                             label = { Text("+ 04:30 PM Workout (1h)", style = MaterialTheme.typography.labelSmall) }
                         )
@@ -306,7 +306,7 @@ fun BlueprintScreen(
                         SuggestionChip(
                             onClick = {
                                 PixelHaptics.crispTick(view)
-                                onSaveBlock(activeEpochDay, 1290, 30, "Night Protocol: Reflection & Tomorrow Plan", "NIGHT", BlockCategory.PLANNING, TaskPriority.MEDIUM)
+                                onSaveBlock(activeEpochDay, 1290, 30, "Night Protocol: Reflection & Tomorrow Plan", "NIGHT", BlockCategory.ROUTINE, TaskPriority.MEDIUM)
                             },
                             label = { Text("+ 09:30 PM Night Protocol (30m)", style = MaterialTheme.typography.labelSmall) }
                         )
@@ -459,7 +459,7 @@ private fun BlueprintTaskCard(
                         color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
                     ) {
                         Text(
-                            text = block.examSubjectTag.uppercase(),
+                            text = (block.examSubjectTag ?: "TASK").uppercase(),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
