@@ -17,9 +17,12 @@ import java.time.temporal.ChronoUnit
 data class ZenithUiState(
     val todayDate: LocalDate = LocalDate.now(),
     val targetExamDate: LocalDate = LocalDate.of(2027, 1, 20),
+    val examTitle: String = "CSIR-NET Physical Sciences",
     val daysRemaining: Long = 87,
     val transformationReadinessPercent: Float = 0f,
+    val userSettings: UserSettingsEntity = UserSettingsEntity(),
     val currentDaySnapshot: FullDaySnapshot? = null,
+    val tomorrowSnapshot: FullDaySnapshot? = null,
     val fourMonthHistory: List<DailyLogEntity> = emptyList(),
     val allLogsWithDetails: List<FullDaySnapshot> = emptyList(),
     val badges: List<BadgeEntity> = emptyList(),
@@ -28,10 +31,25 @@ data class ZenithUiState(
     val wakeStreakDays: Int = 0,
     val isFocusTimerRunning: Boolean = false,
     val activeFocusSeconds: Int = 0,
+    val pendingPomodoroMinutes: Int? = null,
     val userProfile: ZenithUserProfile? = null,
     val authError: String? = null,
     val isAuthLoading: Boolean = false,
     val syncToastMessage: String? = null
+)
+
+private data class QuadState(
+    val timer: Pair<Boolean, Int>,
+    val pomodoro: Int?,
+    val user: ZenithUserProfile?,
+    val meta: Triple<String?, Boolean, String?>
+)
+
+private data class ExtraStreamState(
+    val quad: QuadState,
+    val settings: UserSettingsEntity,
+    val allSnaps: List<FullDaySnapshot>,
+    val tomorrowSnap: FullDaySnapshot?
 )
 
 class ZenithViewModel(
@@ -40,22 +58,46 @@ class ZenithViewModel(
 ) : ViewModel() {
 
     private val todayEpoch = LocalDate.now().toEpochDay()
-    private val examDate = LocalDate.of(2027, 1, 20)
+    private val tomorrowEpoch = todayEpoch + 1
     private val startWindowEpoch = LocalDate.of(2026, 10, 1).toEpochDay()
     private val endWindowEpoch = LocalDate.of(2027, 1, 31).toEpochDay()
 
     private var timerJob: Job? = null
     private val _timerState = MutableStateFlow(Pair(false, 0))
+    private val _pendingPomodoro = MutableStateFlow<Int?>(null)
     private val _authMeta = MutableStateFlow(Triple<String?, Boolean, String?>(null, false, null))
+
+    private val quadFlow = combine(
+        _timerState,
+        _pendingPomodoro,
+        authManager.userState,
+        _authMeta
+    ) { timer, pomodoro, user, meta ->
+        QuadState(timer, pomodoro, user, meta)
+    }
+
+    private val extraStreamFlow = combine(
+        quadFlow,
+        dao.observeUserSettings(),
+        dao.observeAllDaySnapshotsDesc(),
+        dao.observeDaySnapshot(tomorrowEpoch)
+    ) { quad, settings, allSnaps, tomorrowSnap ->
+        ExtraStreamState(
+            quad = quad,
+            settings = settings ?: UserSettingsEntity(),
+            allSnaps = allSnaps,
+            tomorrowSnap = tomorrowSnap
+        )
+    }
 
     val uiState: StateFlow<ZenithUiState> = combine(
         dao.observeDaySnapshot(todayEpoch),
         dao.observeLogsInRange(startWindowEpoch, endWindowEpoch),
-        dao.observeAllDaySnapshotsDesc(),
         dao.observeAllBadges(),
-        combine(_timerState, authManager.userState, _authMeta) { t, u, m -> Triple(t, u, m) }
-    ) { todaySnap, rangeLogs, allSnaps, badges, extra ->
-        val (timer, userProfile, authMeta) = extra
+        extraStreamFlow
+    ) { todaySnap, rangeLogs, badges, extra ->
+        val examDate = LocalDate.ofEpochDay(extra.settings.targetExamEpochDay)
+        val daysRemaining = ChronoUnit.DAYS.between(LocalDate.now(), examDate).coerceAtLeast(0)
         val overallStreak = calculateOverallStreak(rangeLogs)
         val wakeStreak = calculateWakeStreak(rangeLogs)
         val studyStreak = calculateStudyStreak(rangeLogs)
@@ -64,21 +106,25 @@ class ZenithViewModel(
         ZenithUiState(
             todayDate = LocalDate.now(),
             targetExamDate = examDate,
-            daysRemaining = ChronoUnit.DAYS.between(LocalDate.now(), examDate).coerceAtLeast(0),
+            examTitle = extra.settings.examTitle,
+            daysRemaining = daysRemaining,
             transformationReadinessPercent = readiness,
+            userSettings = extra.settings,
             currentDaySnapshot = todaySnap,
+            tomorrowSnapshot = extra.tomorrowSnap,
             fourMonthHistory = rangeLogs,
-            allLogsWithDetails = allSnaps,
+            allLogsWithDetails = extra.allSnaps,
             badges = badges,
             overallStreakDays = overallStreak,
             studyStreakDays = studyStreak,
             wakeStreakDays = wakeStreak,
-            isFocusTimerRunning = timer.first,
-            activeFocusSeconds = timer.second,
-            userProfile = userProfile,
-            authError = authMeta.first,
-            isAuthLoading = authMeta.second,
-            syncToastMessage = authMeta.third
+            isFocusTimerRunning = extra.quad.timer.first,
+            activeFocusSeconds = extra.quad.timer.second,
+            pendingPomodoroMinutes = extra.quad.pomodoro,
+            userProfile = extra.quad.user,
+            authError = extra.quad.meta.first,
+            isAuthLoading = extra.quad.meta.second,
+            syncToastMessage = extra.quad.meta.third
         )
     }.stateIn(
         scope = viewModelScope,
@@ -91,19 +137,32 @@ class ZenithViewModel(
     }
 
     private suspend fun ensureTodayInitialized() {
+        val currentSettings = dao.getUserSettings()
+        if (currentSettings == null) {
+            dao.upsertUserSettings(UserSettingsEntity())
+        }
+
         val currentBadges = dao.observeAllBadges().firstOrNull()
         if (currentBadges.isNullOrEmpty()) {
             dao.upsertBadges(ZenithDatabase.INITIAL_BADGES)
         }
+
+        val settings = dao.getUserSettings() ?: UserSettingsEntity()
         val existingToday = dao.observeDaySnapshot(todayEpoch).firstOrNull()
         if (existingToday == null) {
-            dao.upsertDailyLog(DailyLogEntity(dateEpochDay = todayEpoch))
+            dao.upsertDailyLog(
+                DailyLogEntity(
+                    dateEpochDay = todayEpoch,
+                    targetWakeTimeMinutes = settings.targetWakeMinutes,
+                    targetStudyMinutes = settings.targetStudyMinutes
+                )
+            )
             dao.upsertScheduleBlock(
                 ScheduleBlockEntity(
                     dateEpochDay = todayEpoch,
-                    startTimeMinutes = 330,
+                    startTimeMinutes = settings.targetWakeMinutes,
                     durationMinutes = 30,
-                    title = "05:30 AM Circadian Hydration & Mobility",
+                    title = "Circadian Hydration, Sunlight & Mobility",
                     examSubjectTag = "ROUTINE",
                     category = BlockCategory.WAKE_UP,
                     priority = TaskPriority.HIGH
@@ -114,12 +173,53 @@ class ZenithViewModel(
                     dateEpochDay = todayEpoch,
                     startTimeMinutes = 510,
                     durationMinutes = 120,
-                    title = "Quantum Mechanics: Perturbation & WKB Method",
+                    title = "Quantum Mechanics: Core Formalism",
                     examSubjectTag = "QUANTUM MECH",
                     category = BlockCategory.STUDY,
                     priority = TaskPriority.HIGH
                 )
             )
+        }
+
+        val existingTomorrow = dao.observeDaySnapshot(tomorrowEpoch).firstOrNull()
+        if (existingTomorrow == null) {
+            dao.upsertDailyLog(
+                DailyLogEntity(
+                    dateEpochDay = tomorrowEpoch,
+                    targetWakeTimeMinutes = settings.targetWakeMinutes,
+                    targetStudyMinutes = settings.targetStudyMinutes
+                )
+            )
+        }
+    }
+
+    // --- ONBOARDING & TARGET CUSTOMIZATION ---
+    fun updateUserSettings(
+        examTitle: String,
+        targetDate: LocalDate,
+        wakeTargetMinutes: Int,
+        studyTargetMinutes: Int
+    ) {
+        viewModelScope.launch {
+            val updated = UserSettingsEntity(
+                id = 1,
+                examTitle = examTitle.trim().ifBlank { "January Examination" },
+                targetExamEpochDay = targetDate.toEpochDay(),
+                targetWakeMinutes = wakeTargetMinutes,
+                targetStudyMinutes = studyTargetMinutes,
+                hasCompletedOnboarding = true
+            )
+            dao.upsertUserSettings(updated)
+            dao.updateDailyTargets(todayEpoch, wakeTargetMinutes, studyTargetMinutes)
+            dao.updateDailyTargets(tomorrowEpoch, wakeTargetMinutes, studyTargetMinutes)
+            _authMeta.value = Triple(null, false, "Exam goals locked in: \"$examTitle\"")
+        }
+    }
+
+    fun updateTodayTargets(wakeTargetMinutes: Int, studyTargetMinutes: Int) {
+        viewModelScope.launch {
+            dao.updateDailyTargets(todayEpoch, wakeTargetMinutes, studyTargetMinutes)
+            _authMeta.value = Triple(null, false, "Updated today's wake & study targets")
         }
     }
 
@@ -172,70 +272,83 @@ class ZenithViewModel(
         }
     }
 
-    fun clearSyncToast() {
-        _authMeta.update { it.copy(third = null) }
-    }
-
     fun signOut() {
         authManager.signOut()
     }
 
-    // --- PILLARS & TASKS ---
+    fun clearSyncToast() {
+        _authMeta.value = Triple(_authMeta.value.first, _authMeta.value.second, null)
+    }
+
+    // --- PILLAR I: CIRCADIAN WAKE LOGGING ---
     fun logActualWakeUpNow() {
         viewModelScope.launch {
-            val now = LocalTime.now()
-            val minutes = now.hour * 60 + now.minute
+            val nowMinutes = LocalTime.now().hour * 60 + LocalTime.now().minute
             val currentLog = uiState.value.currentDaySnapshot?.dailyLog
                 ?: DailyLogEntity(dateEpochDay = todayEpoch)
-            val updated = currentLog.copy(actualWakeTimeMinutes = minutes)
+            val updated = currentLog.copy(actualWakeTimeMinutes = nowMinutes)
             dao.upsertDailyLog(recalculateDayCompletion(updated))
             evaluateBadges()
         }
     }
 
+    // --- PILLAR II: DEEP STUDY ENGINE & POMODORO VALIDATION ---
     fun toggleFocusTimer() {
-        val currentlyRunning = _timerState.value.first
-        if (currentlyRunning) {
+        if (_timerState.value.first) {
+            // Stopping timer: if user spent >= 60 seconds, prompt to confirm rather than blindly logging!
+            val elapsedSecs = _timerState.value.second
+            val elapsedMins = elapsedSecs / 60
             timerJob?.cancel()
-            val accruedMinutes = (_timerState.value.second / 60).coerceAtLeast(1)
-            commitStudySessionMinutes(accruedMinutes)
             _timerState.value = Pair(false, 0)
+            if (elapsedMins >= 1) {
+                _pendingPomodoro.value = elapsedMins
+            }
         } else {
-            _timerState.value = Pair(true, _timerState.value.second)
+            // Starting stopwatch
+            _timerState.value = Pair(true, 0)
             timerJob = viewModelScope.launch {
-                while (_timerState.value.first) {
-                    delay(1000L)
-                    _timerState.update { it.copy(second = it.second + 1) }
+                while (true) {
+                    delay(1000)
+                    val nextSec = _timerState.value.second + 1
+                    _timerState.value = Pair(true, nextSec)
+                    // If a standard 25-minute Pomodoro completes (1500 sec)
+                    if (nextSec == 1500) {
+                        _timerState.value = Pair(false, 0)
+                        _pendingPomodoro.value = 25
+                        break
+                    }
                 }
             }
         }
     }
 
-    fun commitStudySessionMinutes(minutesToAdd: Int) {
+    fun confirmPomodoroSession(minutes: Int, subjectTag: String) {
+        viewModelScope.launch {
+            _pendingPomodoro.value = null
+            commitStudySessionMinutes(minutes)
+            _authMeta.value = Triple(null, false, "Validated & logged $minutes mins of study ($subjectTag)")
+        }
+    }
+
+    fun discardPomodoroSession() {
+        _pendingPomodoro.value = null
+        _authMeta.value = Triple(null, false, "Idle Pomodoro session discarded")
+    }
+
+    fun commitStudySessionMinutes(minutes: Int) {
         viewModelScope.launch {
             val currentLog = uiState.value.currentDaySnapshot?.dailyLog
                 ?: DailyLogEntity(dateEpochDay = todayEpoch)
-            val updated = currentLog.copy(
-                totalStudyMinutes = currentLog.totalStudyMinutes + minutesToAdd
-            )
+            val updated = currentLog.copy(totalStudyMinutes = currentLog.totalStudyMinutes + minutes)
             dao.upsertDailyLog(recalculateDayCompletion(updated))
             evaluateBadges()
         }
     }
 
-    fun toggleScheduleBlockCompletion(block: ScheduleBlockEntity) {
-        viewModelScope.launch {
-            dao.upsertScheduleBlock(block.copy(isCompleted = !block.isCompleted))
-            uiState.value.currentDaySnapshot?.dailyLog?.let {
-                dao.upsertDailyLog(recalculateDayCompletion(it))
-            }
-            evaluateBadges()
-        }
-    }
-
+    // --- TIME-BLOCKED BLUEPRINT & SCHEDULE MANAGEMENT ---
     fun saveOrUpdateScheduleBlock(
         id: Long = 0,
-        targetEpochDay: Long = todayEpoch,
+        targetEpochDay: Long,
         startTimeMinutes: Int,
         durationMinutes: Int,
         title: String,
@@ -246,9 +359,12 @@ class ZenithViewModel(
         viewModelScope.launch {
             val targetSnap = dao.observeDaySnapshot(targetEpochDay).firstOrNull()
             if (targetSnap == null) {
+                val settings = dao.getUserSettings() ?: UserSettingsEntity()
                 dao.upsertDailyLog(
                     DailyLogEntity(
                         dateEpochDay = targetEpochDay,
+                        targetWakeTimeMinutes = settings.targetWakeMinutes,
+                        targetStudyMinutes = settings.targetStudyMinutes,
                         plannedNightBeforeTimestamp = System.currentTimeMillis()
                     )
                 )
@@ -274,17 +390,40 @@ class ZenithViewModel(
         }
     }
 
-    fun rollOverTaskToTomorrow(block: ScheduleBlockEntity) {
+    fun toggleScheduleBlockCompletion(block: ScheduleBlockEntity) {
         viewModelScope.launch {
-            val tomorrowEpoch = todayEpoch + 1
-            val tomorrowSnap = dao.observeDaySnapshot(tomorrowEpoch).firstOrNull()
-            if (tomorrowSnap == null) {
-                dao.upsertDailyLog(DailyLogEntity(dateEpochDay = tomorrowEpoch))
-            }
-            dao.rescheduleBlockToNextDay(block.id, tomorrowEpoch)
+            dao.upsertScheduleBlock(block.copy(isCompleted = !block.isCompleted))
+            evaluateBadges()
         }
     }
 
+    fun rollOverTaskToTomorrow(block: ScheduleBlockEntity) {
+        viewModelScope.launch {
+            val targetTomorrow = todayEpoch + 1
+            val tomorrowSnap = dao.observeDaySnapshot(targetTomorrow).firstOrNull()
+            if (tomorrowSnap == null) {
+                val settings = dao.getUserSettings() ?: UserSettingsEntity()
+                dao.upsertDailyLog(
+                    DailyLogEntity(
+                        dateEpochDay = targetTomorrow,
+                        targetWakeTimeMinutes = settings.targetWakeMinutes,
+                        targetStudyMinutes = settings.targetStudyMinutes
+                    )
+                )
+            }
+            dao.rescheduleBlockToNextDay(block.id, targetTomorrow)
+            _authMeta.value = Triple(null, false, "Rolled over \"${block.title}\" to Tomorrow's Blueprint")
+        }
+    }
+
+    fun deleteScheduleBlock(block: ScheduleBlockEntity) {
+        viewModelScope.launch {
+            dao.deleteScheduleBlock(block)
+            _authMeta.value = Triple(null, false, "Task \"${block.title}\" removed")
+        }
+    }
+
+    // --- PILLAR III: PHYSICAL CONDITIONING & EXERCISE MANAGER ---
     fun switchWorkoutModality(modality: WorkoutModality) {
         viewModelScope.launch {
             val currentLog = uiState.value.currentDaySnapshot?.dailyLog
@@ -303,7 +442,7 @@ class ZenithViewModel(
         }
     }
 
-    fun addWorkoutSet(exercise: String, sets: Int, repsLoad: String) {
+    fun addWorkoutExercise(exerciseName: String, targetSets: Int, repsAndLoad: String) {
         viewModelScope.launch {
             val modality = uiState.value.currentDaySnapshot?.dailyLog?.workoutModality
                 ?: WorkoutModality.GYM
@@ -311,14 +450,27 @@ class ZenithViewModel(
                 WorkoutEntryEntity(
                     dateEpochDay = todayEpoch,
                     modality = modality,
-                    exerciseName = exercise.trim(),
-                    targetSets = sets,
-                    completedSets = sets,
-                    repsAndLoad = repsLoad.trim(),
-                    isCompleted = true
+                    exerciseName = exerciseName.trim(),
+                    targetSets = targetSets.coerceAtLeast(1),
+                    completedSets = 0,
+                    repsAndLoad = repsAndLoad.trim(),
+                    isCompleted = false
                 )
             )
-            toggleWorkoutComplete(true)
+        }
+    }
+
+    fun incrementWorkoutSet(entry: WorkoutEntryEntity) {
+        viewModelScope.launch {
+            val nextCompleted = (entry.completedSets + 1).coerceAtMost(entry.targetSets)
+            val isDone = nextCompleted >= entry.targetSets
+            dao.updateWorkoutEntryProgress(entry.id, nextCompleted, isDone)
+
+            val currentEntries = uiState.value.currentDaySnapshot?.workoutEntries ?: emptyList()
+            val allComplete = currentEntries.all { if (it.id == entry.id) isDone else it.isCompleted }
+            if (allComplete && isDone) {
+                toggleWorkoutComplete(true)
+            }
         }
     }
 

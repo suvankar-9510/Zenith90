@@ -4,10 +4,16 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AccessTime
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.zenith90.app.data.local.BlockCategory
 import com.zenith90.app.data.local.TaskPriority
@@ -38,7 +44,19 @@ fun PlannerBottomSheet(
     var selectedCategory by remember { mutableStateOf(BlockCategory.STUDY) }
     var selectedPriority by remember { mutableStateOf(TaskPriority.HIGH) }
 
-    val quickTags = listOf("QUANTUM MECH", "STAT PHYS", "ELECTRODYNAMICS", "SOLID STATE", "NUCLEAR PHYS", "CSIR-NET MOCK")
+    val quickTags = listOf(
+        "QUANTUM MECH", "STAT PHYS", "ELECTRODYNAMICS",
+        "SOLID STATE", "NUCLEAR PHYS", "CSIR-NET MOCK", "REVISION"
+    )
+
+    data class TimePreset(val label: String, val hour: String, val minute: String, val duration: String)
+    val timePresets = listOf(
+        TimePreset("06:00 (2h) Morning", "06", "00", "120"),
+        TimePreset("08:30 (2.5h) Core", "08", "30", "150"),
+        TimePreset("14:00 (2h) Afternoon", "14", "00", "120"),
+        TimePreset("17:30 (1.5h) Evening", "17", "30", "90"),
+        TimePreset("21:00 (1h) Night Review", "21", "00", "60")
+    )
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -48,20 +66,31 @@ fun PlannerBottomSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 24.dp)
                 .padding(bottom = 36.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Text(
-                text = "NIGHT-BEFORE BLUEPRINT ARCHITECT",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary
-            )
-            Text(
-                text = "Lock In Time-Blocked Objective",
-                style = MaterialTheme.typography.titleMedium
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "NIGHT-BEFORE BLUEPRINT ARCHITECT",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = "Lock In Time-Blocked Objective",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
 
+            // Target Day Switcher
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 FilterChip(
                     selected = planForTomorrow,
@@ -69,7 +98,7 @@ fun PlannerBottomSheet(
                         PixelHaptics.crispTick(view)
                         planForTomorrow = true
                     },
-                    label = { Text("TOMORROW'S BLUEPRINT", style = MaterialTheme.typography.labelSmall) }
+                    label = { Text("TOMORROW'S BLUEPRINT", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold) }
                 )
                 FilterChip(
                     selected = !planForTomorrow,
@@ -81,7 +110,38 @@ fun PlannerBottomSheet(
                 )
             }
 
-            // Quick Subject Selector Row
+            // Quick Presets
+            Text(
+                text = "QUICK TIME BLOCK PRESETS",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                timePresets.forEach { preset ->
+                    AssistChip(
+                        onClick = {
+                            PixelHaptics.crispTick(view)
+                            startHour = preset.hour
+                            startMinute = preset.minute
+                            durationMins = preset.duration
+                        },
+                        label = { Text(preset.label, style = MaterialTheme.typography.labelSmall) },
+                        leadingIcon = { Icon(Icons.Outlined.AccessTime, contentDescription = null, modifier = Modifier.size(14.dp)) }
+                    )
+                }
+            }
+
+            // Subject Tag Quick Chips
+            Text(
+                text = "SUBJECT TAGS",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -89,7 +149,9 @@ fun PlannerBottomSheet(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 quickTags.forEach { tag ->
-                    AssistChip(
+                    val isSelected = subjectTag == tag
+                    FilterChip(
+                        selected = isSelected,
                         onClick = {
                             PixelHaptics.crispTick(view)
                             subjectTag = tag
@@ -102,26 +164,29 @@ fun PlannerBottomSheet(
             OutlinedTextField(
                 value = title,
                 onValueChange = { title = it },
-                label = { Text("Time Block / Objective Title") },
-                placeholder = { Text("e.g., Perturbation Theory Problem Set") },
+                label = { Text("Objective / Task Title") },
+                placeholder = { Text("e.g. Perturbation Theory Problem Set") },
                 modifier = Modifier.fillMaxWidth(),
-                singleLine = true
+                singleLine = true,
+                shape = RoundedCornerShape(14.dp)
             )
 
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
                     value = subjectTag,
                     onValueChange = { subjectTag = it },
-                    label = { Text("Exam Subject Tag") },
+                    label = { Text("Subject Tag") },
                     modifier = Modifier.weight(1f),
-                    singleLine = true
+                    singleLine = true,
+                    shape = RoundedCornerShape(14.dp)
                 )
                 OutlinedTextField(
                     value = durationMins,
                     onValueChange = { durationMins = it.filter { ch -> ch.isDigit() } },
-                    label = { Text("Duration (Min)") },
+                    label = { Text("Duration (Mins)") },
                     modifier = Modifier.width(130.dp),
-                    singleLine = true
+                    singleLine = true,
+                    shape = RoundedCornerShape(14.dp)
                 )
             }
 
@@ -131,17 +196,20 @@ fun PlannerBottomSheet(
                     onValueChange = { startHour = it.filter { ch -> ch.isDigit() }.take(2) },
                     label = { Text("Start Hour (00-23)") },
                     modifier = Modifier.weight(1f),
-                    singleLine = true
+                    singleLine = true,
+                    shape = RoundedCornerShape(14.dp)
                 )
                 OutlinedTextField(
                     value = startMinute,
                     onValueChange = { startMinute = it.filter { ch -> ch.isDigit() }.take(2) },
                     label = { Text("Start Min (00-59)") },
                     modifier = Modifier.weight(1f),
-                    singleLine = true
+                    singleLine = true,
+                    shape = RoundedCornerShape(14.dp)
                 )
             }
 
+            // Priority Chips
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TaskPriority.entries.forEach { priority ->
                     FilterChip(
@@ -155,6 +223,7 @@ fun PlannerBottomSheet(
                 }
             }
 
+            // Lock In Button
             Button(
                 onClick = {
                     if (title.isNotBlank()) {
@@ -180,12 +249,19 @@ fun PlannerBottomSheet(
                         onDismiss()
                     }
                 },
+                enabled = title.isNotBlank(),
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(54.dp),
                 shape = RoundedCornerShape(16.dp)
             ) {
-                Text("LOCK IN TIME BLOCK", style = MaterialTheme.typography.labelSmall)
+                Icon(Icons.Outlined.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = if (planForTomorrow) "LOCK IN FOR TOMORROW'S BLUEPRINT" else "LOCK IN FOR TODAY",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold
+                )
             }
         }
     }

@@ -127,6 +127,16 @@ data class BadgeEntity(
     val accentHexEnd: Long
 )
 
+@Entity(tableName = "user_settings")
+data class UserSettingsEntity(
+    @PrimaryKey val id: Int = 1,
+    val examTitle: String = "CSIR-NET Physical Sciences",
+    val targetExamEpochDay: Long = 20839, // LocalDate.of(2027, 1, 20).toEpochDay()
+    val targetWakeMinutes: Int = 330, // 05:30 AM
+    val targetStudyMinutes: Int = 360, // 6 hours
+    val hasCompletedOnboarding: Boolean = false
+)
+
 data class FullDaySnapshot(
     @Embedded val dailyLog: DailyLogEntity,
     @Relation(parentColumn = "dateEpochDay", entityColumn = "dateEpochDay")
@@ -148,8 +158,14 @@ interface ZenithDao {
     @Query("SELECT * FROM daily_logs WHERE dateEpochDay BETWEEN :startEpoch AND :endEpoch ORDER BY dateEpochDay ASC")
     fun observeLogsInRange(startEpoch: Long, endEpoch: Long): Flow<List<DailyLogEntity>>
 
+    @Query("SELECT * FROM schedule_blocks WHERE dateEpochDay = :epochDay ORDER BY startTimeMinutes ASC")
+    fun observeScheduleBlocksForDay(epochDay: Long): Flow<List<ScheduleBlockEntity>>
+
     @Upsert
     suspend fun upsertDailyLog(log: DailyLogEntity)
+
+    @Query("UPDATE daily_logs SET targetWakeTimeMinutes = :wakeMinutes, targetStudyMinutes = :studyMinutes WHERE dateEpochDay = :epochDay")
+    suspend fun updateDailyTargets(epochDay: Long, wakeMinutes: Int, studyMinutes: Int)
 
     @Upsert
     suspend fun upsertScheduleBlock(block: ScheduleBlockEntity): Long
@@ -163,6 +179,9 @@ interface ZenithDao {
     @Upsert
     suspend fun upsertWorkoutEntry(entry: WorkoutEntryEntity)
 
+    @Query("UPDATE workout_entries SET completedSets = :completedSets, isCompleted = :isCompleted WHERE id = :id")
+    suspend fun updateWorkoutEntryProgress(id: Long, completedSets: Int, isCompleted: Boolean)
+
     @Delete
     suspend fun deleteWorkoutEntry(entry: WorkoutEntryEntity)
 
@@ -171,6 +190,15 @@ interface ZenithDao {
 
     @Upsert
     suspend fun upsertBadges(badges: List<BadgeEntity>)
+
+    @Query("SELECT * FROM user_settings WHERE id = 1")
+    fun observeUserSettings(): Flow<UserSettingsEntity?>
+
+    @Query("SELECT * FROM user_settings WHERE id = 1")
+    suspend fun getUserSettings(): UserSettingsEntity?
+
+    @Upsert
+    suspend fun upsertUserSettings(settings: UserSettingsEntity)
 }
 
 @Database(
@@ -178,9 +206,10 @@ interface ZenithDao {
         DailyLogEntity::class,
         ScheduleBlockEntity::class,
         WorkoutEntryEntity::class,
-        BadgeEntity::class
+        BadgeEntity::class,
+        UserSettingsEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

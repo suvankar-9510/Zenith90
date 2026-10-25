@@ -49,25 +49,34 @@ jobs:
             echo "Found APK at $APK_PATH"
             cp "$APK_PATH" ./zenith90-debug.apk
             
-            # Publish to v1.3.0-pixel release
-            gh release delete v1.3.0-pixel --yes || true
-            gh release create v1.3.0-pixel ./zenith90-debug.apk \
-              --title "Zenith90 v1.3.0 Pixel Preview (Debug APK)" \
-              --notes "### ⚡ Zenith90 v1.3.0 Instant Pixel APK
+            # Publish to v1.4.0-pixel release
+            gh release delete v1.4.0-pixel --yes || true
+            gh release create v1.4.0-pixel ./zenith90-debug.apk \
+              --title "Zenith90 v1.4.0 Pixel Preview (Debug APK)" \
+              --notes "### ⚡ Zenith90 v1.4.0 Instant Pixel APK
               
               Automated build compiled via GitHub Actions.
               
-              #### What's Fixed & Added:
-              - **Resilient Authentication**: Seamless email & password sign-up/sign-in with auto-fallback.
-              - **Google Sign-In**: Integrated Google Credential Manager with sandbox fallback.
-              - **One-Tap Guest Mode**: Instant guest access with local Room storage.
-              - **Brand New Logo**: Added custom geometric Zenith90 vector logo mark and adaptive icons.
-              - **Clean Database Migrations**: Upgraded to DB v3 with destructive migrations for clean upgrades.
+              #### Comprehensive Architecture Updates & Fixes:
+              - **Custom Onboarding & Exam Config**: Set custom exam title, target date, and daily study/wake targets.
+              - **Today's 3-Pillar Equilibrium**: Clear labeling, centered daily progress, and inline target customizer.
+              - **Deep Study Pomodoro Validation**: Confirmation modal prevents phantom/idle time from being credited.
+              - **Physical Conditioning Flexibility**: Set-by-set tracker (+1 Set), custom exercises, and reps/load manager for Gym & Calisthenics.
+              - **Time-Blocked Blueprint Redesign**: Today vs Tomorrow schedule view, fixed rollover with instant feedback, and task deletion.
+              - **Dynamic Historical Telemetry**: Real Room DB data binding for 14-day velocity and 120-day heatmap grid.
+              - **Gamification Vault Clarity**: Interactive badge modals with full criteria rules, strategy guides, and streak explainers.
               
               #### Direct Download & Testing:
               1. Download **\`zenith90-debug.apk\`** on your Android device.
               2. Open file and confirm install (allow 'Install Unknown Apps' if prompted).
               3. Launch **Zenith90**!" \
+              --prerelease
+
+            # Also update previous tags for backwards compatibility
+            gh release delete v1.3.0-pixel --yes || true
+            gh release create v1.3.0-pixel ./zenith90-debug.apk \
+              --title "Zenith90 v1.4.0 Pixel Preview (Debug APK)" \
+              --notes "Updated to Zenith90 v1.4.0 with comprehensive updates across all 7 pillars." \
               --prerelease
 
             # Also update v1.2.0-pixel and v1.0.0-preview for backwards-compatible download links
