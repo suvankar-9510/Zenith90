@@ -236,58 +236,85 @@ abstract class ZenithDatabase : RoomDatabase() {
 
         val INITIAL_BADGES = listOf(
             BadgeEntity(
+                badgeId = "first_blood",
+                title = "FIRST BLOOD (BRONZE I)",
+                subtitle = "Day 1 Protocol Initiate",
+                criteriaDescription = "Complete Day 1 of the 90-day Protocol with all 3 pillars touched.",
+                progressTarget = 1,
+                accentHexStart = 0xFFCD7F32,
+                accentHexEnd = 0xFFA0522D
+            ),
+            BadgeEntity(
                 badgeId = "5am_club",
-                title = "THE 5 AM CLUB",
+                title = "5 AM VANGUARD (SILVER III)",
                 subtitle = "Circadian Mastery",
                 criteriaDescription = "7 consecutive days hitting your target wake-up window.",
                 progressTarget = 7,
-                accentHexStart = 0xFFF6D365,
-                accentHexEnd = 0xFFFDA085
+                accentHexStart = 0xFFE2E8F0,
+                accentHexEnd = 0xFF94A3B8
+            ),
+            BadgeEntity(
+                badgeId = "quad_pomodoro",
+                title = "SNIPER FOCUS (GOLD I)",
+                subtitle = "Deep Flow Marksman",
+                criteriaDescription = "Log 4 verified Pomodoro deep study sessions in a single calendar day.",
+                progressTarget = 4,
+                accentHexStart = 0xFFFFDF00,
+                accentHexEnd = 0xFFFFA500
             ),
             BadgeEntity(
                 badgeId = "iron_and_ink",
-                title = "IRON & INK",
+                title = "GLADIATOR (GOLD II)",
                 subtitle = "Dual Scholar-Athlete",
                 criteriaDescription = "Complete a full physical training block and 6+ hours of deep study in a single day.",
                 progressTarget = 1,
-                accentHexStart = 0xFF84FAB0,
-                accentHexEnd = 0xFF8FD3F4
+                accentHexStart = 0xFFFFD700,
+                accentHexEnd = 0xFFFF8C00
+            ),
+            BadgeEntity(
+                badgeId = "discipline_100",
+                title = "IMMORTAL PROTOCOL (PLATINUM III)",
+                subtitle = "100% Equilibrium Master",
+                criteriaDescription = "Achieve a full 100% 3-pillar equilibrium score in a single calendar day.",
+                progressTarget = 1,
+                accentHexStart = 0xFF00F5D4,
+                accentHexEnd = 0xFF00BBF9
             ),
             BadgeEntity(
                 badgeId = "night_architect",
-                title = "NIGHT ARCHITECT",
-                subtitle = "Nocturnal Precision",
+                title = "BLUEPRINT ARCHITECT (PLATINUM I)",
+                subtitle = "Tactical Night Precision",
                 criteriaDescription = "Lock in your next-day blueprint before 10:30 PM for 7 consecutive nights.",
                 progressTarget = 7,
-                accentHexStart = 0xFFA18CD1,
-                accentHexEnd = 0xFFFBC2EB
+                accentHexStart = 0xFF00F2FE,
+                accentHexEnd = 0xFF4FACFE
             ),
             BadgeEntity(
                 badgeId = "relentless_30",
-                title = "RELENTLESS 30",
+                title = "TITAN 30 (DIAMOND I)",
                 subtitle = "First Month Forged",
                 criteriaDescription = "30 days of unbroken transformation logs leading to January.",
                 progressTarget = 30,
-                accentHexStart = 0xFFF6D365,
-                accentHexEnd = 0xFFFDA085
+                accentHexStart = 0xFF00F2FE,
+                accentHexEnd = 0xFF4FACFE
             ),
             BadgeEntity(
                 badgeId = "relentless_60",
-                title = "RELENTLESS 60",
-                subtitle = "Deep Momentum",
+                title = "APEX WARRIOR (HEROIC)",
+                subtitle = "Momentum Inevitable",
                 criteriaDescription = "60 days of unbroken transformation logs leading to January.",
                 progressTarget = 60,
-                accentHexStart = 0xFF84FAB0,
-                accentHexEnd = 0xFF8FD3F4
+                accentHexStart = 0xFFFF0844,
+                accentHexEnd = 0xFFFFB199
             ),
             BadgeEntity(
                 badgeId = "relentless_90",
-                title = "ZENITH 90",
-                subtitle = "Apex Readiness",
+                title = "ZENITH CONQUEROR (MYTHIC)",
+                subtitle = "Grandmaster Readiness",
                 criteriaDescription = "90 days of unbroken discipline prior to the January examination.",
                 progressTarget = 90,
-                accentHexStart = 0xFFD4AF37,
-                accentHexEnd = 0xFFF3E5AB
+                accentHexStart = 0xFFB12A5B,
+                accentHexEnd = 0xFFFFAA00
             )
         )
     }

@@ -8,6 +8,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AccessTime
 import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -17,6 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.zenith90.app.data.local.BlockCategory
 import com.zenith90.app.data.local.TaskPriority
+import com.zenith90.app.ui.components.HapticTimeSlider
 import com.zenith90.app.ui.theme.PixelHaptics
 import java.time.LocalDate
 
@@ -171,43 +173,36 @@ fun PlannerBottomSheet(
                 shape = RoundedCornerShape(14.dp)
             )
 
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
-                    value = subjectTag,
-                    onValueChange = { subjectTag = it },
-                    label = { Text("Subject Tag") },
-                    modifier = Modifier.weight(1f),
-                    singleLine = true,
-                    shape = RoundedCornerShape(14.dp)
-                )
-                OutlinedTextField(
-                    value = durationMins,
-                    onValueChange = { durationMins = it.filter { ch -> ch.isDigit() } },
-                    label = { Text("Duration (Mins)") },
-                    modifier = Modifier.width(130.dp),
-                    singleLine = true,
-                    shape = RoundedCornerShape(14.dp)
-                )
-            }
+            // START TIME SLIDER (WITH HAPTICS)
+            val currentStartMinutes = ((startHour.toIntOrNull() ?: 8) * 60 + (startMinute.toIntOrNull() ?: 30)).toFloat()
+            HapticTimeSlider(
+                value = currentStartMinutes,
+                onValueChange = { totalMins ->
+                    val h = totalMins.toInt() / 60
+                    val m = totalMins.toInt() % 60
+                    startHour = "%02d".format(h)
+                    startMinute = "%02d".format(m)
+                },
+                valueRange = 240f..1380f,
+                stepMinutes = 15,
+                title = "Start Time (Haptic Dial)",
+                formattedValue = formatMinutesToTime(currentStartMinutes.toInt()),
+                icon = Icons.Outlined.AccessTime
+            )
 
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
-                    value = startHour,
-                    onValueChange = { startHour = it.filter { ch -> ch.isDigit() }.take(2) },
-                    label = { Text("Start Hour (00-23)") },
-                    modifier = Modifier.weight(1f),
-                    singleLine = true,
-                    shape = RoundedCornerShape(14.dp)
-                )
-                OutlinedTextField(
-                    value = startMinute,
-                    onValueChange = { startMinute = it.filter { ch -> ch.isDigit() }.take(2) },
-                    label = { Text("Start Min (00-59)") },
-                    modifier = Modifier.weight(1f),
-                    singleLine = true,
-                    shape = RoundedCornerShape(14.dp)
-                )
-            }
+            // DURATION SLIDER (WITH HAPTICS)
+            val currentDurationMinutes = (durationMins.toFloatOrNull() ?: 90f).coerceIn(15f, 240f)
+            HapticTimeSlider(
+                value = currentDurationMinutes,
+                onValueChange = { dur ->
+                    durationMins = dur.toInt().toString()
+                },
+                valueRange = 15f..240f,
+                stepMinutes = 15,
+                title = "Block Duration (Haptic Dial)",
+                formattedValue = "${(durationMins.toIntOrNull() ?: 90) / 60}h ${(durationMins.toIntOrNull() ?: 90) % 60}m",
+                icon = Icons.Outlined.Timer
+            )
 
             // Priority Chips
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -265,4 +260,16 @@ fun PlannerBottomSheet(
             }
         }
     }
+}
+
+private fun formatMinutesToTime(minutes: Int): String {
+    val hrs = (minutes / 60) % 24
+    val mins = minutes % 60
+    val period = if (hrs >= 12) "PM" else "AM"
+    val displayHrs = when {
+        hrs == 0 -> 12
+        hrs > 12 -> hrs - 12
+        else -> hrs
+    }
+    return "%02d:%02d %s".format(displayHrs, mins, period)
 }

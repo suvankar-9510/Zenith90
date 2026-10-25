@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Analytics
+import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Dashboard
 import androidx.compose.material.icons.outlined.EmojiEvents
 import androidx.compose.material3.*
@@ -26,6 +27,7 @@ import com.zenith90.app.ui.viewmodel.ZenithViewModel
 
 enum class ZenithTab(val label: String) {
     DASHBOARD("COMMAND"),
+    BLUEPRINT("BLUEPRINT"),
     ANALYTICS("TRAJECTORY"),
     REWARDS("VAULT & LOGS")
 }
@@ -87,6 +89,7 @@ class MainActivity : ComponentActivity() {
                                             Icon(
                                                 imageVector = when (tab) {
                                                     ZenithTab.DASHBOARD -> Icons.Outlined.Dashboard
+                                                    ZenithTab.BLUEPRINT -> Icons.Outlined.CalendarMonth
                                                     ZenithTab.ANALYTICS -> Icons.Outlined.Analytics
                                                     ZenithTab.REWARDS -> Icons.Outlined.EmojiEvents
                                                 },
@@ -122,12 +125,31 @@ class MainActivity : ComponentActivity() {
                                     onUpdateUserSettings = viewModel::updateUserSettings,
                                     onUpdateTodayTargets = viewModel::updateTodayTargets,
                                     onTriggerCloudSync = viewModel::triggerCloudSync,
-                                    onSignOut = viewModel::signOut
+                                    onSignOut = viewModel::signOut,
+                                    onNavigateToBlueprint = { currentTab = ZenithTab.BLUEPRINT }
+                                )
+                                ZenithTab.BLUEPRINT -> BlueprintScreen(
+                                    state = state,
+                                    onToggleBlockCompletion = viewModel::toggleScheduleBlockCompletion,
+                                    onRescheduleBlockTomorrow = viewModel::rollOverTaskToTomorrow,
+                                    onDeleteScheduleBlock = viewModel::deleteScheduleBlock,
+                                    onSaveBlock = { epochDay, startMins, durMins, title, tag, cat, prio ->
+                                        viewModel.saveOrUpdateScheduleBlock(
+                                            targetEpochDay = epochDay,
+                                            startTimeMinutes = startMins,
+                                            durationMinutes = durMins,
+                                            title = title,
+                                            examSubjectTag = tag,
+                                            category = cat,
+                                            priority = prio
+                                        )
+                                    }
                                 )
                                 ZenithTab.ANALYTICS -> AnalyticsScreen(state = state)
                                 ZenithTab.REWARDS -> RewardsScreen(
                                     state = state,
-                                    onUpdateReflection = viewModel::updateDailyReflection
+                                    onUpdateReflection = viewModel::updateDailyReflection,
+                                    onClaimBadge = viewModel::claimBadge
                                 )
                             }
                         }

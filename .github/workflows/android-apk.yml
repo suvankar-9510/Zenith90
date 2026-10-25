@@ -49,27 +49,32 @@ jobs:
             echo "Found APK at $APK_PATH"
             cp "$APK_PATH" ./zenith90-debug.apk
             
-            # Publish to v1.4.0-pixel release
-            gh release delete v1.4.0-pixel --yes || true
-            gh release create v1.4.0-pixel ./zenith90-debug.apk \
-              --title "Zenith90 v1.4.0 Pixel Preview (Debug APK)" \
-              --notes "### ⚡ Zenith90 v1.4.0 Instant Pixel APK
+            # Publish to v1.5.0-pixel release
+            gh release delete v1.5.0-pixel --yes || true
+            gh release create v1.5.0-pixel ./zenith90-debug.apk \
+              --title "Zenith90 v1.5.0 Pixel (Material You & Gaming Vault)" \
+              --notes "### ⚡ Zenith90 v1.5.0 Instant Pixel APK
               
               Automated build compiled via GitHub Actions.
               
-              #### Comprehensive Architecture Updates & Fixes:
-              - **Custom Onboarding & Exam Config**: Set custom exam title, target date, and daily study/wake targets.
-              - **Today's 3-Pillar Equilibrium**: Clear labeling, centered daily progress, and inline target customizer.
-              - **Deep Study Pomodoro Validation**: Confirmation modal prevents phantom/idle time from being credited.
-              - **Physical Conditioning Flexibility**: Set-by-set tracker (+1 Set), custom exercises, and reps/load manager for Gym & Calisthenics.
-              - **Time-Blocked Blueprint Redesign**: Today vs Tomorrow schedule view, fixed rollover with instant feedback, and task deletion.
-              - **Dynamic Historical Telemetry**: Real Room DB data binding for 14-day velocity and 120-day heatmap grid.
-              - **Gamification Vault Clarity**: Interactive badge modals with full criteria rules, strategy guides, and streak explainers.
+              #### Comprehensive Updates:
+              - **Material You Dynamic Theming**: Wallpaper Monet sync on Android 12+ (Pixel devices) with expressive typography headers.
+              - **Haptic Dial Sliders**: Smooth sliders with tactile haptic ticks for target wake-up times, study hours, and blueprint schedules.
+              - **Pillar II Boost Verification**: Verification dialog for +25M / +50M study boosts prevents accidental credit and ensures streak integrity.
+              - **Dedicated Blueprint Page**: Dedicated tab for Today & Tomorrow time blocks, execution statistics, and quick presets.
+              - **PUBG & Free Fire Gaming Badges**: Battle Royale rank tiers (Bronze, Silver, Gold, Platinum, Diamond, Heroic, Mythic) with dark grey locked state and vibrant neon glow for claimed ranks, plus instant claim actions.
               
               #### Direct Download & Testing:
               1. Download **\`zenith90-debug.apk\`** on your Android device.
               2. Open file and confirm install (allow 'Install Unknown Apps' if prompted).
               3. Launch **Zenith90**!" \
+              --prerelease
+
+            # Also update v1.4.0-pixel for backwards compatibility
+            gh release delete v1.4.0-pixel --yes || true
+            gh release create v1.4.0-pixel ./zenith90-debug.apk \
+              --title "Zenith90 v1.5.0 Pixel (Material You & Gaming Vault)" \
+              --notes "Updated to Zenith90 v1.5.0 with Material You dynamic color, haptic sliders, Pillar II boost verification, dedicated blueprint page, and PUBG/Free Fire rank badges." \
               --prerelease
 
             # Also update previous tags for backwards compatibility

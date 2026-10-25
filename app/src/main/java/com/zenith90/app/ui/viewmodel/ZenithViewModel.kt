@@ -142,9 +142,11 @@ class ZenithViewModel(
             dao.upsertUserSettings(UserSettingsEntity())
         }
 
-        val currentBadges = dao.observeAllBadges().firstOrNull()
-        if (currentBadges.isNullOrEmpty()) {
-            dao.upsertBadges(ZenithDatabase.INITIAL_BADGES)
+        val currentBadges = dao.observeAllBadges().firstOrNull() ?: emptyList()
+        val existingIds = currentBadges.map { it.badgeId }.toSet()
+        val missingBadges = ZenithDatabase.INITIAL_BADGES.filter { it.badgeId !in existingIds }
+        if (missingBadges.isNotEmpty()) {
+            dao.upsertBadges(missingBadges)
         }
 
         val settings = dao.getUserSettings() ?: UserSettingsEntity()
@@ -333,6 +335,29 @@ class ZenithViewModel(
     fun discardPomodoroSession() {
         _pendingPomodoro.value = null
         _authMeta.value = Triple(null, false, "Idle Pomodoro session discarded")
+    }
+
+    fun verifyAndCommitStudyBoost(minutes: Int, subjectTag: String) {
+        viewModelScope.launch {
+            commitStudySessionMinutes(minutes)
+            _authMeta.value = Triple(null, false, "Verified Pillar II Boost: +$minutes mins ($subjectTag)")
+        }
+    }
+
+    fun claimBadge(badgeId: String) {
+        viewModelScope.launch {
+            val currentBadges = dao.observeAllBadges().firstOrNull() ?: return@launch
+            val badge = currentBadges.find { it.badgeId == badgeId } ?: return@launch
+            if (badge.progressCurrent >= badge.progressTarget) {
+                val updated = badge.copy(
+                    isUnlocked = true,
+                    unlockedEpochMillis = System.currentTimeMillis()
+                )
+                dao.upsertBadges(listOf(updated))
+                _authMeta.value = Triple(null, false, "★ RANK CLAIMED! ${badge.title} ★")
+                triggerCloudSync()
+            }
+        }
     }
 
     fun commitStudySessionMinutes(minutes: Int) {
@@ -536,14 +561,35 @@ class ZenithViewModel(
 
         val updatedBadges = currentBadges.map { badge ->
             when (badge.badgeId) {
+                "first_blood" -> {
+                    val touched = logs.any { it.completionRatio > 0.2f || it.totalStudyMinutes > 0 }
+                    badge.copy(
+                        progressCurrent = if (touched || badge.isUnlocked) 1 else 0,
+                        isUnlocked = badge.isUnlocked || touched
+                    )
+                }
                 "5am_club" -> badge.copy(
                     progressCurrent = wakeStreak.coerceAtMost(7),
                     isUnlocked = badge.isUnlocked || wakeStreak >= 7
                 )
+                "quad_pomodoro" -> {
+                    val pomos = (todayLog?.totalStudyMinutes ?: 0) / 25
+                    badge.copy(
+                        progressCurrent = pomos.coerceAtMost(4),
+                        isUnlocked = badge.isUnlocked || pomos >= 4
+                    )
+                }
                 "iron_and_ink" -> badge.copy(
                     progressCurrent = if (ironAndInkDone || badge.isUnlocked) 1 else 0,
                     isUnlocked = badge.isUnlocked || ironAndInkDone
                 )
+                "discipline_100" -> {
+                    val perfect = logs.any { it.completionRatio >= 0.99f }
+                    badge.copy(
+                        progressCurrent = if (perfect || badge.isUnlocked) 1 else 0,
+                        isUnlocked = badge.isUnlocked || perfect
+                    )
+                }
                 "night_architect" -> badge.copy(
                     progressCurrent = nightPlannedCount.coerceAtMost(7),
                     isUnlocked = badge.isUnlocked || nightPlannedCount >= 7

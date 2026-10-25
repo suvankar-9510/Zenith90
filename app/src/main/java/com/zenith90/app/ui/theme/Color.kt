@@ -30,6 +30,23 @@ object ZenithColors {
     val VioletStart = Color(0xFFA18CD1)
     val PinkEnd = Color(0xFFFBC2EB)
 
+    // Battle Royale / Gaming Tiers (PUBG & Free Fire inspired)
+    val BronzeGradient = Brush.linearGradient(listOf(Color(0xFFE08D43), Color(0xFF8C4A19)))
+    val SilverGradient = Brush.linearGradient(listOf(Color(0xFFE2E8F0), Color(0xFF94A3B8)))
+    val GoldGradient = Brush.linearGradient(listOf(Color(0xFFFFDF00), Color(0xFFFFA500)))
+    val PlatinumGradient = Brush.linearGradient(listOf(Color(0xFF00F5D4), Color(0xFF00BBF9)))
+    val DiamondGradient = Brush.linearGradient(listOf(Color(0xFF00F2FE), Color(0xFF4FACFE)))
+    val HeroicGradient = Brush.linearGradient(listOf(Color(0xFFFF0844), Color(0xFFFFB199)))
+    val ConquerorGradient = Brush.linearGradient(listOf(Color(0xFFB12A5B), Color(0xFFFF5E36), Color(0xFFFFAA00)))
+    val MythicGradient = Brush.linearGradient(listOf(Color(0xFF7F00FF), Color(0xFFE100FF)))
+
+    // Locked Grey Palette
+    val LockedGreyCard = Color(0xFF16161C)
+    val LockedGreySurface = Color(0xFF22222B)
+    val LockedGreyStroke = Color(0xFF323240)
+    val LockedGreyIcon = Color(0xFF78788C)
+    val LockedGreyText = Color(0xFF9E9EAF)
+
     val StreakGradient = Brush.linearGradient(
         colors = listOf(AmberStart, CoralEnd),
         start = Offset(0f, 0f),

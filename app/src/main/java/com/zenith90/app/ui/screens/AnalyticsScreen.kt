@@ -59,21 +59,28 @@ fun AnalyticsScreen(state: ZenithUiState) {
         contentPadding = PaddingValues(top = 22.dp, bottom = 100.dp)
     ) {
         item {
-            Column {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier.padding(bottom = 2.dp)
+                ) {
+                    Text(
+                        text = "MISSION TELEMETRY RADAR",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
                 Text(
-                    text = "HISTORICAL TELEMETRY & TRAJECTORY",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold
+                    text = "${state.examTitle} READINESS",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Black,
+                    color = MaterialTheme.colorScheme.onBackground
                 )
-                Spacer(Modifier.height(4.dp))
                 Text(
-                    text = "${state.examTitle} Readiness",
-                    style = MaterialTheme.typography.displayMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "Telemetry dynamically evaluated from Room database records.",
+                    text = "Historical telemetry dynamically evaluated from Room database records",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

@@ -29,6 +29,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.zenith90.app.data.local.*
+import com.zenith90.app.ui.components.HapticTimeSlider
 import com.zenith90.app.ui.theme.PixelHaptics
 import com.zenith90.app.ui.theme.ZenithColors
 import com.zenith90.app.ui.viewmodel.ZenithUiState
@@ -54,7 +55,8 @@ fun DashboardScreen(
     onUpdateUserSettings: (examTitle: String, targetDate: LocalDate, wakeMinutes: Int, studyMinutes: Int) -> Unit,
     onUpdateTodayTargets: (wakeMinutes: Int, studyMinutes: Int) -> Unit,
     onTriggerCloudSync: () -> Unit,
-    onSignOut: () -> Unit
+    onSignOut: () -> Unit,
+    onNavigateToBlueprint: (() -> Unit)? = null
 ) {
     val view = LocalView.current
     val dayLog = state.currentDaySnapshot?.dailyLog ?: DailyLogEntity(
@@ -70,6 +72,7 @@ fun DashboardScreen(
     var showExamConfigDialog by remember { mutableStateOf(false) }
     var showTargetEditDialog by remember { mutableStateOf(false) }
     var showAddExerciseDialog by remember { mutableStateOf(false) }
+    var pendingBoostMinutes by remember { mutableStateOf<Int?>(null) }
     var selectedBlueprintTab by remember { mutableStateOf(0) } // 0 = Today, 1 = Tomorrow
 
     // Automatic first-time onboarding prompt if user hasn't set their custom exam
@@ -136,13 +139,84 @@ fun DashboardScreen(
         )
     }
 
-    // --- DIALOG 2: ONBOARDING & EXAM CONFIGURATION ---
+    // --- DIALOG 1.5: VERIFY PILLAR II STUDY BOOST (+25M, +50M) ---
+    if (pendingBoostMinutes != null) {
+        val boostMins = pendingBoostMinutes!!
+        var selectedSubject by remember { mutableStateOf("Core Concepts") }
+        var focusIntensity by remember { mutableStateOf("HIGH FLOW 🔥") }
+
+        AlertDialog(
+            onDismissRequest = { pendingBoostMinutes = null },
+            icon = { Icon(Icons.Outlined.Verified, contentDescription = null, tint = ZenithColors.AmberStart) },
+            title = {
+                Text(
+                    text = "VERIFY PILLAR II DEEP BOOST (+$boostMins M)",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = "Confirm you completed this +$boostMins minute deep study session to verify trajectory score & streaks:",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        text = "Select Focus Subject:",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        listOf("Physics", "Math", "Chemistry", "Revision", "Problems").forEach { subj ->
+                            FilterChip(
+                                selected = selectedSubject == subj,
+                                onClick = { selectedSubject = subj },
+                                label = { Text(subj, style = MaterialTheme.typography.labelSmall) }
+                            )
+                        }
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        listOf("HIGH FLOW 🔥", "STANDARD 📖").forEach { intensity ->
+                            FilterChip(
+                                selected = focusIntensity == intensity,
+                                onClick = { focusIntensity = intensity },
+                                label = { Text(intensity, style = MaterialTheme.typography.labelSmall) }
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        PixelHaptics.confirmCheck(view)
+                        onConfirmPomodoro(boostMins, "$selectedSubject • $focusIntensity")
+                        pendingBoostMinutes = null
+                    }
+                ) {
+                    Text("VERIFY & CREDIT +${boostMins}M", style = MaterialTheme.typography.labelSmall)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingBoostMinutes = null }) {
+                    Text("CANCEL", style = MaterialTheme.typography.labelSmall)
+                }
+            }
+        )
+    }
+
+    // --- DIALOG 2: ONBOARDING & EXAM CONFIGURATION (WITH HAPTIC SLIDERS) ---
     if (showExamConfigDialog) {
         var examTitleInput by remember { mutableStateOf(state.userSettings.examTitle) }
         var targetDaysInput by remember { mutableStateOf(state.daysRemaining.toString()) }
-        var studyHoursInput by remember { mutableStateOf((state.userSettings.targetStudyMinutes / 60).toString()) }
-        var wakeHourInput by remember { mutableStateOf((state.userSettings.targetWakeMinutes / 60).toString()) }
-        var wakeMinInput by remember { mutableStateOf((state.userSettings.targetWakeMinutes % 60).toString()) }
+        var studyHoursInput by remember { mutableFloatStateOf((state.userSettings.targetStudyMinutes / 60).toFloat()) }
+        var wakeMinsInput by remember { mutableFloatStateOf(state.userSettings.targetWakeMinutes.toFloat()) }
 
         AlertDialog(
             onDismissRequest = { showExamConfigDialog = false },
@@ -154,7 +228,7 @@ fun DashboardScreen(
                 )
             },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     OutlinedTextField(
                         value = examTitleInput,
                         onValueChange = { examTitleInput = it },
@@ -175,38 +249,25 @@ fun DashboardScreen(
                         shape = RoundedCornerShape(12.dp)
                     )
 
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        OutlinedTextField(
-                            value = studyHoursInput,
-                            onValueChange = { studyHoursInput = it.filter { ch -> ch.isDigit() } },
-                            label = { Text("Study Target (Hrs)") },
-                            modifier = Modifier.weight(1f),
-                            singleLine = true,
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                        OutlinedTextField(
-                            value = "%02d:%02d".format(wakeHourInput.toIntOrNull() ?: 5, wakeMinInput.toIntOrNull() ?: 30),
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text("Wake Target") },
-                            modifier = Modifier.weight(1f),
-                            singleLine = true,
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                    }
+                    HapticTimeSlider(
+                        value = wakeMinsInput,
+                        onValueChange = { wakeMinsInput = it },
+                        valueRange = 240f..540f,
+                        stepMinutes = 15,
+                        title = "Default Daily Wake Target",
+                        formattedValue = formatMinutesToTime(wakeMinsInput.toInt()),
+                        icon = Icons.Outlined.WbSunny
+                    )
 
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf("05:00", "05:30", "06:00", "06:30").forEach { timeStr ->
-                            AssistChip(
-                                onClick = {
-                                    val parts = timeStr.split(":")
-                                    wakeHourInput = parts[0]
-                                    wakeMinInput = parts[1]
-                                },
-                                label = { Text(timeStr, style = MaterialTheme.typography.labelSmall) }
-                            )
-                        }
-                    }
+                    HapticTimeSlider(
+                        value = studyHoursInput,
+                        onValueChange = { studyHoursInput = it },
+                        valueRange = 1f..14f,
+                        stepMinutes = 1,
+                        title = "Default Daily Study Target",
+                        formattedValue = "%.1f Hours (%d mins)".format(studyHoursInput, (studyHoursInput * 60).toInt()),
+                        icon = Icons.Outlined.AutoStories
+                    )
                 }
             },
             confirmButton = {
@@ -214,8 +275,8 @@ fun DashboardScreen(
                     PixelHaptics.heavyUnlock(view)
                     val days = targetDaysInput.toLongOrNull() ?: 87L
                     val targetDate = LocalDate.now().plusDays(days)
-                    val studyMins = (studyHoursInput.toIntOrNull() ?: 6) * 60
-                    val wakeMins = (wakeHourInput.toIntOrNull() ?: 5) * 60 + (wakeMinInput.toIntOrNull() ?: 30)
+                    val studyMins = (studyHoursInput * 60).toInt()
+                    val wakeMins = wakeMinsInput.toInt()
 
                     onUpdateUserSettings(examTitleInput, targetDate, wakeMins, studyMins)
                     showExamConfigDialog = false
@@ -231,40 +292,47 @@ fun DashboardScreen(
         )
     }
 
-    // --- DIALOG 3: EDIT TODAY'S TARGETS DIRECTLY ---
+    // --- DIALOG 3: EDIT TODAY'S TARGETS DIRECTLY (WITH HAPTIC SLIDERS) ---
     if (showTargetEditDialog) {
-        var todayStudyHrs by remember { mutableStateOf((dayLog.targetStudyMinutes / 60).toString()) }
-        var todayWakeMins by remember { mutableStateOf(dayLog.targetWakeTimeMinutes) }
+        var todayStudyHrs by remember { mutableFloatStateOf(dayLog.targetStudyMinutes / 60f) }
+        var todayWakeMins by remember { mutableFloatStateOf(dayLog.targetWakeTimeMinutes.toFloat()) }
 
         AlertDialog(
             onDismissRequest = { showTargetEditDialog = false },
-            title = { Text("EDIT TODAY'S TARGETS", style = MaterialTheme.typography.titleMedium) },
+            title = {
+                Text(
+                    text = "EDIT TODAY'S TARGETS",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedTextField(
-                        value = todayStudyHrs,
-                        onValueChange = { todayStudyHrs = it.filter { ch -> ch.isDigit() } },
-                        label = { Text("Today's Study Goal (Hours)") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    HapticTimeSlider(
+                        value = todayWakeMins,
+                        onValueChange = { todayWakeMins = it },
+                        valueRange = 240f..540f,
+                        stepMinutes = 15,
+                        title = "Target Wake-Up Time",
+                        formattedValue = formatMinutesToTime(todayWakeMins.toInt()),
+                        icon = Icons.Outlined.WbSunny
                     )
-                    Text("Today's Wake Target: ${formatMinutesToTime(todayWakeMins)}", style = MaterialTheme.typography.bodyMedium)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf(300 to "05:00 AM", 330 to "05:30 AM", 360 to "06:00 AM").forEach { (mins, label) ->
-                            FilterChip(
-                                selected = todayWakeMins == mins,
-                                onClick = { todayWakeMins = mins },
-                                label = { Text(label, style = MaterialTheme.typography.labelSmall) }
-                            )
-                        }
-                    }
+
+                    HapticTimeSlider(
+                        value = todayStudyHrs,
+                        onValueChange = { todayStudyHrs = it },
+                        valueRange = 1f..14f,
+                        stepMinutes = 1,
+                        title = "Target Deep Study (Hours)",
+                        formattedValue = "%.1f Hours (%d mins)".format(todayStudyHrs, (todayStudyHrs * 60).toInt()),
+                        icon = Icons.Outlined.AutoStories
+                    )
                 }
             },
             confirmButton = {
                 Button(onClick = {
                     PixelHaptics.confirmCheck(view)
-                    val hrs = todayStudyHrs.toIntOrNull() ?: 6
-                    onUpdateTodayTargets(todayWakeMins, hrs * 60)
+                    onUpdateTodayTargets(todayWakeMins.toInt(), (todayStudyHrs * 60).toInt())
                     showTargetEditDialog = false
                 }) {
                     Text("SAVE TODAY'S TARGETS", style = MaterialTheme.typography.labelSmall)
@@ -474,8 +542,8 @@ fun DashboardScreen(
                     onToggleFocusTimer()
                 },
                 onQuickAddMinutes = { mins ->
-                    PixelHaptics.confirmCheck(view)
-                    onQuickAddStudyMinutes(mins)
+                    PixelHaptics.crispTick(view)
+                    pendingBoostMinutes = mins
                 }
             )
         }
@@ -549,7 +617,7 @@ fun DashboardScreen(
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.weight(1f)
                     ) {
-                        Text("TODAY'S BLUEPRINT (${todayBlocks.size})", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                        Text("TODAY (${todayBlocks.size})", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                     }
                     Button(
                         onClick = {
@@ -563,7 +631,52 @@ fun DashboardScreen(
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.weight(1f)
                     ) {
-                        Text("TOMORROW'S PLAN (${tomorrowBlocks.size})", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                        Text("TOMORROW (${tomorrowBlocks.size})", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                // Dedicated Blueprint Page Shortcut
+                if (onNavigateToBlueprint != null) {
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .clickable {
+                                PixelHaptics.crispTick(view)
+                                onNavigateToBlueprint()
+                            },
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.CalendarMonth,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Text(
+                                    text = "OPEN DEDICATED BLUEPRINT PAGE",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    fontWeight = FontWeight.ExtraBold
+                                )
+                            }
+                            Icon(
+                                imageVector = Icons.Filled.ArrowForward,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
                     }
                 }
             }
