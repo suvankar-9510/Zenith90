@@ -22,6 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.zenith90.app.data.local.BlockCategory
 import com.zenith90.app.data.local.ScheduleBlockEntity
 import com.zenith90.app.data.local.TaskPriority
 import com.zenith90.app.ui.components.HapticTimeSlider
@@ -37,7 +38,7 @@ fun BlueprintScreen(
     onToggleBlockCompletion: (ScheduleBlockEntity) -> Unit,
     onRescheduleBlockTomorrow: (ScheduleBlockEntity) -> Unit,
     onDeleteScheduleBlock: (ScheduleBlockEntity) -> Unit,
-    onSaveBlock: (targetEpochDay: Long, startTimeMinutes: Int, durationMinutes: Int, title: String, tag: String, category: String, priority: TaskPriority) -> Unit
+    onSaveBlock: (targetEpochDay: Long, startTimeMinutes: Int, durationMinutes: Int, title: String, tag: String, category: BlockCategory, priority: TaskPriority) -> Unit
 ) {
     val view = LocalView.current
     var selectedTab by remember { mutableIntStateOf(0) } // 0 = Today, 1 = Tomorrow
@@ -47,8 +48,8 @@ fun BlueprintScreen(
     val tomorrowDate = todayDate.plusDays(1)
     val dateFormatter = DateTimeFormatter.ofPattern("EEE, dd MMM")
 
-    val todayBlocks = state.currentDaySnapshot?.scheduleBlocks ?: emptyList()
-    val tomorrowBlocks = state.tomorrowScheduleBlocks
+    val todayBlocks = state.currentDaySnapshot?.scheduleBlocks?.sortedBy { it.startTimeMinutes } ?: emptyList()
+    val tomorrowBlocks = state.tomorrowSnapshot?.scheduleBlocks?.sortedBy { it.startTimeMinutes } ?: emptyList()
 
     val activeBlocks = if (selectedTab == 0) todayBlocks else tomorrowBlocks
     val activeDate = if (selectedTab == 0) todayDate else tomorrowDate
@@ -269,7 +270,7 @@ fun BlueprintScreen(
                         SuggestionChip(
                             onClick = {
                                 PixelHaptics.crispTick(view)
-                                onSaveBlock(activeEpochDay, 360, 150, "Morning Deep Work Session", "CORE", "STUDY", TaskPriority.HIGH)
+                                onSaveBlock(activeEpochDay, 360, 150, "Morning Deep Work Session", "CORE", BlockCategory.STUDY, TaskPriority.HIGH)
                             },
                             label = { Text("+ 06:00 AM Morning Core (2.5h)", style = MaterialTheme.typography.labelSmall) }
                         )
@@ -278,7 +279,7 @@ fun BlueprintScreen(
                         SuggestionChip(
                             onClick = {
                                 PixelHaptics.crispTick(view)
-                                onSaveBlock(activeEpochDay, 600, 150, "Midday Problem Grind", "PRACTICE", "STUDY", TaskPriority.HIGH)
+                                onSaveBlock(activeEpochDay, 600, 150, "Midday Problem Grind", "PRACTICE", BlockCategory.STUDY, TaskPriority.HIGH)
                             },
                             label = { Text("+ 10:00 AM Midday Grind (2.5h)", style = MaterialTheme.typography.labelSmall) }
                         )
@@ -287,7 +288,7 @@ fun BlueprintScreen(
                         SuggestionChip(
                             onClick = {
                                 PixelHaptics.crispTick(view)
-                                onSaveBlock(activeEpochDay, 990, 60, "Physical Conditioning Session", "WORKOUT", "TRAINING", TaskPriority.MEDIUM)
+                                onSaveBlock(activeEpochDay, 990, 60, "Physical Conditioning Session", "WORKOUT", BlockCategory.TRAINING, TaskPriority.MEDIUM)
                             },
                             label = { Text("+ 04:30 PM Workout (1h)", style = MaterialTheme.typography.labelSmall) }
                         )
@@ -296,7 +297,7 @@ fun BlueprintScreen(
                         SuggestionChip(
                             onClick = {
                                 PixelHaptics.crispTick(view)
-                                onSaveBlock(activeEpochDay, 1110, 120, "Evening Revision & Mock Review", "REVISION", "STUDY", TaskPriority.HIGH)
+                                onSaveBlock(activeEpochDay, 1110, 120, "Evening Revision & Mock Review", "REVISION", BlockCategory.STUDY, TaskPriority.HIGH)
                             },
                             label = { Text("+ 06:30 PM Revision (2h)", style = MaterialTheme.typography.labelSmall) }
                         )
@@ -305,7 +306,7 @@ fun BlueprintScreen(
                         SuggestionChip(
                             onClick = {
                                 PixelHaptics.crispTick(view)
-                                onSaveBlock(activeEpochDay, 1290, 30, "Night Protocol: Reflection & Tomorrow Plan", "NIGHT", "PLANNING", TaskPriority.MEDIUM)
+                                onSaveBlock(activeEpochDay, 1290, 30, "Night Protocol: Reflection & Tomorrow Plan", "NIGHT", BlockCategory.PLANNING, TaskPriority.MEDIUM)
                             },
                             label = { Text("+ 09:30 PM Night Protocol (30m)", style = MaterialTheme.typography.labelSmall) }
                         )
@@ -524,11 +525,11 @@ private fun BlueprintTaskCard(
 private fun CreateBlockHapticDialog(
     defaultEpochDay: Long,
     onDismiss: () -> Unit,
-    onConfirm: (targetEpochDay: Long, startTimeMinutes: Int, durationMinutes: Int, title: String, tag: String, category: String, priority: TaskPriority) -> Unit
+    onConfirm: (targetEpochDay: Long, startTimeMinutes: Int, durationMinutes: Int, title: String, tag: String, category: BlockCategory, priority: TaskPriority) -> Unit
 ) {
     var title by remember { mutableStateOf("") }
     var tag by remember { mutableStateOf("Core") }
-    var category by remember { mutableStateOf("STUDY") }
+    var category by remember { mutableStateOf(BlockCategory.STUDY) }
     var priority by remember { mutableStateOf(TaskPriority.HIGH) }
     var startTimeMinutes by remember { mutableFloatStateOf(360f) } // 06:00 AM default
     var durationMinutes by remember { mutableFloatStateOf(90f) }   // 1.5 hours default
@@ -667,16 +668,4 @@ private fun CreateBlockHapticDialog(
             }
         }
     )
-}
-
-private fun formatMinutesToTime(minutes: Int): String {
-    val hrs = (minutes / 60) % 24
-    val mins = minutes % 60
-    val period = if (hrs >= 12) "PM" else "AM"
-    val displayHrs = when {
-        hrs == 0 -> 12
-        hrs > 12 -> hrs - 12
-        else -> hrs
-    }
-    return "%02d:%02d %s".format(displayHrs, mins, period)
 }

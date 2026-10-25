@@ -133,7 +133,28 @@ class ZenithViewModel(
     )
 
     init {
-        viewModelScope.launch { ensureTodayInitialized() }
+        viewModelScope.launch {
+            authManager.userState.collect { user ->
+                if (user != null) {
+                    if (authManager.hasAccountSwitched(user.uid)) {
+                        resetDatabaseForNewUser()
+                    } else {
+                        ensureTodayInitialized()
+                    }
+                } else {
+                    ensureTodayInitialized()
+                }
+            }
+        }
+    }
+
+    private suspend fun resetDatabaseForNewUser() {
+        dao.clearDailyLogs()
+        dao.clearScheduleBlocks()
+        dao.clearWorkoutEntries()
+        dao.clearUserSettings()
+        dao.clearBadges()
+        ensureTodayInitialized()
     }
 
     private suspend fun ensureTodayInitialized() {
@@ -275,7 +296,10 @@ class ZenithViewModel(
     }
 
     fun signOut() {
-        authManager.signOut()
+        viewModelScope.launch {
+            authManager.signOut()
+            resetDatabaseForNewUser()
+        }
     }
 
     fun clearSyncToast() {

@@ -261,15 +261,3 @@ fun PlannerBottomSheet(
         }
     }
 }
-
-private fun formatMinutesToTime(minutes: Int): String {
-    val hrs = (minutes / 60) % 24
-    val mins = minutes % 60
-    val period = if (hrs >= 12) "PM" else "AM"
-    val displayHrs = when {
-        hrs == 0 -> 12
-        hrs > 12 -> hrs - 12
-        else -> hrs
-    }
-    return "%02d:%02d %s".format(displayHrs, mins, period)
-}

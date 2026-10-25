@@ -199,6 +199,21 @@ interface ZenithDao {
 
     @Upsert
     suspend fun upsertUserSettings(settings: UserSettingsEntity)
+
+    @Query("DELETE FROM daily_logs")
+    suspend fun clearDailyLogs()
+
+    @Query("DELETE FROM schedule_blocks")
+    suspend fun clearScheduleBlocks()
+
+    @Query("DELETE FROM workout_entries")
+    suspend fun clearWorkoutEntries()
+
+    @Query("DELETE FROM user_settings")
+    suspend fun clearUserSettings()
+
+    @Query("DELETE FROM badges")
+    suspend fun clearBadges()
 }
 
 @Database(

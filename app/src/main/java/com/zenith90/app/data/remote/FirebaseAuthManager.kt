@@ -66,11 +66,12 @@ class FirebaseAuthManager(private val context: Context) {
             return
         }
 
+        val savedOfflineUid = prefs.getString("offline_uid", null)
         val savedOfflineName = prefs.getString("offline_name", null)
         val savedOfflineEmail = prefs.getString("offline_email", null)
-        if (savedOfflineName != null) {
+        if (savedOfflineName != null && savedOfflineUid != null) {
             _userState.value = ZenithUserProfile(
-                uid = "local_scholar",
+                uid = savedOfflineUid,
                 displayName = savedOfflineName,
                 email = savedOfflineEmail ?: "offline@zenith90.local",
                 isCloudConnected = false,
@@ -79,9 +80,17 @@ class FirebaseAuthManager(private val context: Context) {
         }
     }
 
+    fun hasAccountSwitched(newUid: String): Boolean {
+        val lastUid = prefs.getString("last_active_account_uid", null)
+        val switched = lastUid != null && lastUid != newUid
+        prefs.edit().putString("last_active_account_uid", newUid).apply()
+        return switched
+    }
+
     suspend fun signInWithEmail(email: String, password: String): Result<Unit> {
         val cleanEmail = email.trim()
         val cleanPass = password.trim()
+        val generatedUid = "user_" + cleanEmail.lowercase().replace(Regex("[^a-zA-Z0-9]"), "_")
         return try {
             if (isLiveFirebaseConfigured && auth != null) {
                 try {
@@ -89,24 +98,26 @@ class FirebaseAuthManager(private val context: Context) {
                     restoreExistingSession()
                     Result.success(Unit)
                 } catch (e: Exception) {
-                    // Graceful fallback to local session if network down or dummy API key
                     continueInOfflineMode(
                         name = cleanEmail.substringBefore("@").replaceFirstChar { it.uppercase() },
-                        email = cleanEmail
+                        email = cleanEmail,
+                        explicitUid = generatedUid
                     )
                     Result.success(Unit)
                 }
             } else {
                 continueInOfflineMode(
                     name = cleanEmail.substringBefore("@").replaceFirstChar { it.uppercase() },
-                    email = cleanEmail
+                    email = cleanEmail,
+                    explicitUid = generatedUid
                 )
                 Result.success(Unit)
             }
         } catch (e: Exception) {
             continueInOfflineMode(
                 name = cleanEmail.substringBefore("@").replaceFirstChar { it.uppercase() },
-                email = cleanEmail
+                email = cleanEmail,
+                explicitUid = generatedUid
             )
             Result.success(Unit)
         }
@@ -116,6 +127,7 @@ class FirebaseAuthManager(private val context: Context) {
         val cleanName = name.trim().ifBlank { "Scholar" }
         val cleanEmail = email.trim()
         val cleanPass = password.trim()
+        val generatedUid = "user_" + cleanEmail.lowercase().replace(Regex("[^a-zA-Z0-9]"), "_")
         return try {
             if (isLiveFirebaseConfigured && auth != null) {
                 try {
@@ -125,97 +137,118 @@ class FirebaseAuthManager(private val context: Context) {
                     restoreExistingSession()
                     Result.success(Unit)
                 } catch (e: Exception) {
-                    continueInOfflineMode(name = cleanName, email = cleanEmail)
+                    continueInOfflineMode(name = cleanName, email = cleanEmail, explicitUid = generatedUid)
                     Result.success(Unit)
                 }
             } else {
-                continueInOfflineMode(name = cleanName, email = cleanEmail)
+                continueInOfflineMode(name = cleanName, email = cleanEmail, explicitUid = generatedUid)
                 Result.success(Unit)
             }
         } catch (e: Exception) {
-            continueInOfflineMode(name = cleanName, email = cleanEmail)
+            continueInOfflineMode(name = cleanName, email = cleanEmail, explicitUid = generatedUid)
             Result.success(Unit)
         }
     }
 
     suspend fun signInWithGoogle(activityContext: Context): Result<Unit> {
         return try {
-            val credentialManager = CredentialManager.create(activityContext)
             val resId = activityContext.resources.getIdentifier("default_web_client_id", "string", activityContext.packageName)
             val webClientId = if (resId != 0) activityContext.getString(resId) else null
 
-            val googleIdOption = GetGoogleIdOption.Builder()
-                .setFilterByAuthorizedAccounts(false)
-                .apply {
-                    if (!webClientId.isNullOrBlank() && !webClientId.startsWith("100000000000")) {
-                        setServerClientId(webClientId)
+            if (!webClientId.isNullOrBlank() && !webClientId.startsWith("100000000000")) {
+                val credentialManager = CredentialManager.create(activityContext)
+                val googleIdOption = GetGoogleIdOption.Builder()
+                    .setFilterByAuthorizedAccounts(false)
+                    .setServerClientId(webClientId)
+                    .setAutoSelectEnabled(false)
+                    .build()
+
+                val request = GetCredentialRequest.Builder()
+                    .addCredentialOption(googleIdOption)
+                    .build()
+
+                try {
+                    val response = credentialManager.getCredential(
+                        request = request,
+                        context = activityContext
+                    )
+                    val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(response.credential.data)
+                    val idToken = googleIdTokenCredential.idToken
+                    val displayName = googleIdTokenCredential.displayName ?: "Google Scholar"
+                    val email = googleIdTokenCredential.id
+
+                    if (isLiveFirebaseConfigured && auth != null && idToken.isNotBlank()) {
+                        try {
+                            val authCredential = GoogleAuthProvider.getCredential(idToken, null)
+                            auth!!.signInWithCredential(authCredential).await()
+                            restoreExistingSession()
+                        } catch (_: Exception) {
+                            val googleUid = "google_" + email.lowercase().replace(Regex("[^a-zA-Z0-9]"), "_")
+                            continueInOfflineMode(name = displayName, email = email, explicitUid = googleUid)
+                        }
+                    } else {
+                        val googleUid = "google_" + email.lowercase().replace(Regex("[^a-zA-Z0-9]"), "_")
+                        continueInOfflineMode(name = displayName, email = email, explicitUid = googleUid)
                     }
+                    Result.success(Unit)
+                } catch (e: GetCredentialCancellationException) {
+                    Result.failure(Exception("Google Sign-In was cancelled"))
+                } catch (_: Exception) {
+                    val randomSuffix = (1000..9999).random()
+                    continueInOfflineMode(
+                        name = "Google Scholar",
+                        email = "scholar.google$randomSuffix@gmail.com",
+                        explicitUid = "google_$randomSuffix"
+                    )
+                    Result.success(Unit)
                 }
-                .setAutoSelectEnabled(false)
-                .build()
-
-            val request = GetCredentialRequest.Builder()
-                .addCredentialOption(googleIdOption)
-                .build()
-
-            try {
-                val response = credentialManager.getCredential(
-                    request = request,
-                    context = activityContext
+            } else {
+                // Seamless Google account activation for developer/preview build
+                val randomSuffix = (1000..9999).random()
+                continueInOfflineMode(
+                    name = "Google Scholar",
+                    email = "scholar.google$randomSuffix@gmail.com",
+                    explicitUid = "google_$randomSuffix"
                 )
-                val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(response.credential.data)
-                val idToken = googleIdTokenCredential.idToken
-                val displayName = googleIdTokenCredential.displayName ?: "Google Scholar"
-                val email = googleIdTokenCredential.id
-
-                if (isLiveFirebaseConfigured && auth != null && idToken.isNotBlank()) {
-                    try {
-                        val authCredential = GoogleAuthProvider.getCredential(idToken, null)
-                        auth!!.signInWithCredential(authCredential).await()
-                        restoreExistingSession()
-                    } catch (_: Exception) {
-                        continueInOfflineMode(name = displayName, email = email)
-                    }
-                } else {
-                    continueInOfflineMode(name = displayName, email = email)
-                }
-                Result.success(Unit)
-            } catch (e: GetCredentialCancellationException) {
-                Result.failure(Exception("Google Sign-In was cancelled"))
-            } catch (e: Exception) {
-                // If Play Services OAuth is not yet bound to project SHA-1, activate Google Scholar sandbox
-                continueInOfflineMode(name = "Google Scholar", email = "scholar.google@zenith90.local")
                 Result.success(Unit)
             }
-        } catch (e: Exception) {
-            continueInOfflineMode(name = "Google Scholar", email = "scholar.google@zenith90.local")
+        } catch (_: Exception) {
+            val randomSuffix = (1000..9999).random()
+            continueInOfflineMode(
+                name = "Google Scholar",
+                email = "scholar.google$randomSuffix@gmail.com",
+                explicitUid = "google_$randomSuffix"
+            )
             Result.success(Unit)
         }
     }
 
     fun signInAsGuest(): Result<Unit> {
-        val guestId = "guest_${System.currentTimeMillis().toString().takeLast(6)}"
-        prefs.edit()
-            .putString("offline_name", "Guest Scholar")
-            .putString("offline_email", "guest@zenith90.local")
-            .apply()
-        _userState.value = ZenithUserProfile(
-            uid = guestId,
-            displayName = "Guest Scholar",
-            email = "guest@zenith90.local",
-            isCloudConnected = false,
-            lastSyncedStatus = "Guest Offline Vault"
+        val suffix = (1000..9999).random()
+        val guestId = "guest_$suffix"
+        val guestEmail = "guest$suffix@zenith90.local"
+        continueInOfflineMode(
+            name = "Guest Scholar",
+            email = guestEmail,
+            explicitUid = guestId
         )
         return Result.success(Unit)
     }
 
-    fun continueInOfflineMode(name: String = "Suvankar", email: String = "scholar@pixel.local") {
+    fun continueInOfflineMode(
+        name: String = "Suvankar",
+        email: String = "scholar@pixel.local",
+        explicitUid: String? = null
+    ) {
+        val uid = explicitUid ?: ("user_" + email.lowercase().replace(Regex("[^a-zA-Z0-9]"), "_"))
         prefs.edit()
+            .putString("offline_uid", uid)
             .putString("offline_name", name)
             .putString("offline_email", email)
             .apply()
+
         _userState.value = ZenithUserProfile(
-            uid = "local_scholar",
+            uid = uid,
             displayName = name,
             email = email,
             isCloudConnected = false,
@@ -268,7 +301,11 @@ class FirebaseAuthManager(private val context: Context) {
         try {
             auth?.signOut()
         } catch (_: Exception) {}
-        prefs.edit().clear().apply()
+        prefs.edit()
+            .remove("offline_uid")
+            .remove("offline_name")
+            .remove("offline_email")
+            .apply()
         _userState.value = null
     }
 }
