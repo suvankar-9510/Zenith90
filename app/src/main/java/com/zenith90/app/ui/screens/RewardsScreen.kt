@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Verified
 import androidx.compose.material3.*
@@ -17,10 +18,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.zenith90.app.data.local.BadgeEntity
 import com.zenith90.app.data.local.FullDaySnapshot
+import com.zenith90.app.ui.theme.PixelHaptics
 import com.zenith90.app.ui.viewmodel.ZenithUiState
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -30,7 +33,11 @@ fun RewardsScreen(
     state: ZenithUiState,
     onUpdateReflection: (String) -> Unit
 ) {
+    val view = LocalView.current
     var searchQuery by remember { mutableStateOf("") }
+    var reflectionInput by remember(state.currentDaySnapshot?.dailyLog?.reflectionNote) {
+        mutableStateOf(state.currentDaySnapshot?.dailyLog?.reflectionNote ?: "")
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -79,8 +86,42 @@ fun RewardsScreen(
             }
         }
 
+        // Daily 1-Line Reflection Editor
         item {
-            Spacer(Modifier.height(12.dp))
+            Card(
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = "TODAY'S 1-LINE AUDIT REFLECTION",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = reflectionInput,
+                            onValueChange = { reflectionInput = it },
+                            placeholder = { Text("What went well today? Lock in your note...") },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true
+                        )
+                        FilledIconButton(onClick = {
+                            PixelHaptics.confirmCheck(view)
+                            onUpdateReflection(reflectionInput)
+                        }) {
+                            Icon(Icons.Outlined.Check, contentDescription = "Save Reflection")
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
             Text(
                 text = "IMMUTABLE DAILY LOGBOOK & AUDIT TRAIL",
                 style = MaterialTheme.typography.labelSmall,

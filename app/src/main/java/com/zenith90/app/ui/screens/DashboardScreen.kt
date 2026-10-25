@@ -20,14 +20,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
-import com.zenith90.app.data.auth.ZenithUser
 import com.zenith90.app.data.local.*
 import com.zenith90.app.ui.theme.PixelHaptics
 import com.zenith90.app.ui.theme.ZenithColors
@@ -38,21 +36,69 @@ fun DashboardScreen(
     state: ZenithUiState,
     onLogWakeUpNow: () -> Unit,
     onToggleFocusTimer: () -> Unit,
+    onQuickAddStudyMinutes: (Int) -> Unit,
     onSwitchWorkoutModality: (WorkoutModality) -> Unit,
     onToggleWorkoutCompleted: (Boolean) -> Unit,
+    onAddWorkoutSet: (String, Int, String) -> Unit,
+    onDeleteWorkoutSet: (WorkoutEntryEntity) -> Unit,
     onToggleBlockCompletion: (ScheduleBlockEntity) -> Unit,
     onRescheduleBlockTomorrow: (ScheduleBlockEntity) -> Unit,
     onOpenNightBlueprintSheet: () -> Unit,
+    onTriggerCloudSync: () -> Unit,
     onSignOut: () -> Unit
 ) {
     val view = LocalView.current
-    var showProfileDialog by remember { mutableStateOf(false) }
-
     val dayLog = state.currentDaySnapshot?.dailyLog ?: DailyLogEntity(
-        userId = state.currentUser?.uid ?: "guest",
         dateEpochDay = state.todayDate.toEpochDay()
     )
     val blocks = state.currentDaySnapshot?.scheduleBlocks?.sortedBy { it.startTimeMinutes } ?: emptyList()
+    val workoutEntries = state.currentDaySnapshot?.workoutEntries ?: emptyList()
+    var showProfileDialog by remember { mutableStateOf(false) }
+
+    if (showProfileDialog) {
+        AlertDialog(
+            onDismissRequest = { showProfileDialog = false },
+            title = {
+                Text(
+                    text = state.userProfile?.displayName ?: "Zenith90 Scholar",
+                    style = MaterialTheme.typography.titleMedium
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = state.userProfile?.email ?: "",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "Status: ${state.userProfile?.lastSyncedStatus ?: "Local Room Active"}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    PixelHaptics.confirmCheck(view)
+                    onTriggerCloudSync()
+                    showProfileDialog = false
+                }) {
+                    Icon(Icons.Outlined.CloudUpload, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("SYNC TO FIREBASE", style = MaterialTheme.typography.labelSmall)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showProfileDialog = false
+                    onSignOut()
+                }) {
+                    Text("SIGN OUT", style = MaterialTheme.typography.labelSmall)
+                }
+            }
+        )
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -64,14 +110,10 @@ fun DashboardScreen(
     ) {
         item {
             ExamCountdownHeader(
-                currentUser = state.currentUser,
                 daysRemaining = state.daysRemaining,
                 readinessPercent = state.transformationReadinessPercent,
                 streakDays = state.overallStreakDays,
-                onOpenBlueprint = {
-                    PixelHaptics.crispTick(view)
-                    onOpenNightBlueprintSheet()
-                },
+                userName = state.userProfile?.displayName ?: "Scholar",
                 onOpenProfile = {
                     PixelHaptics.crispTick(view)
                     showProfileDialog = true
@@ -101,6 +143,10 @@ fun DashboardScreen(
                 onToggleTimer = {
                     PixelHaptics.confirmCheck(view)
                     onToggleFocusTimer()
+                },
+                onQuickAddMinutes = { mins ->
+                    PixelHaptics.confirmCheck(view)
+                    onQuickAddStudyMinutes(mins)
                 }
             )
         }
@@ -109,6 +155,7 @@ fun DashboardScreen(
             TrainingPillarCard(
                 modality = dayLog.workoutModality,
                 isCompleted = dayLog.workoutCompleted,
+                entries = workoutEntries,
                 onSwitchModality = {
                     PixelHaptics.crispTick(view)
                     onSwitchWorkoutModality(it)
@@ -116,6 +163,14 @@ fun DashboardScreen(
                 onToggleComplete = {
                     PixelHaptics.heavyUnlock(view)
                     onToggleWorkoutCompleted(it)
+                },
+                onAddSet = { name, sets, reps ->
+                    PixelHaptics.confirmCheck(view)
+                    onAddWorkoutSet(name, sets, reps)
+                },
+                onDeleteSet = {
+                    PixelHaptics.crispTick(view)
+                    onDeleteWorkoutSet(it)
                 }
             )
         }
@@ -160,27 +215,14 @@ fun DashboardScreen(
             }
         }
     }
-
-    if (showProfileDialog) {
-        UserProfileDialog(
-            user = state.currentUser,
-            onDismiss = { showProfileDialog = false },
-            onSignOut = {
-                showProfileDialog = false
-                PixelHaptics.heavyUnlock(view)
-                onSignOut()
-            }
-        )
-    }
 }
 
 @Composable
 private fun ExamCountdownHeader(
-    currentUser: ZenithUser?,
     daysRemaining: Long,
     readinessPercent: Float,
     streakDays: Int,
-    onOpenBlueprint: () -> Unit,
+    userName: String,
     onOpenProfile: () -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -213,48 +255,28 @@ private fun ExamCountdownHeader(
                 }
             }
 
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surface,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                modifier = Modifier.clickable { onOpenProfile() }
             ) {
-                Surface(
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.surface,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                    modifier = Modifier.clickable { onOpenBlueprint() }
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "🔥 $streakDays D",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                }
-
-                // Profile Avatar Chip
-                Surface(
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    border = BorderStroke(1.5.dp, ZenithColors.AmberStart),
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clickable { onOpenProfile() }
-                ) {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = currentUser?.initials ?: "ZN",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
+                    Icon(
+                        imageVector = Icons.Outlined.AccountCircle,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = "${userName.uppercase()} • 🔥 $streakDays",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
                 }
             }
         }
@@ -278,7 +300,7 @@ private fun ExamCountdownHeader(
                         )
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            text = currentUser?.displayName ?: "Zenith Trajectory",
+                            text = "Zenith90 Trajectory",
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurface
                         )
@@ -308,99 +330,6 @@ private fun ExamCountdownHeader(
             }
         }
     }
-}
-
-@Composable
-private fun UserProfileDialog(
-    user: ZenithUser?,
-    onDismiss: () -> Unit,
-    onSignOut: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(46.dp)
-                        .clip(CircleShape)
-                        .background(ZenithColors.StreakGradient),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = user?.initials ?: "ZN",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF0F0F12)
-                    )
-                }
-                Column {
-                    Text(
-                        text = user?.displayName ?: "Zenith Scholar",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = if (user?.isAnonymous == true) "Guest Session" else (user?.email ?: "Offline Vault"),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                HorizontalDivider(color = MaterialTheme.colorScheme.outline)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text("Account UID:", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(
-                        text = user?.uid?.take(16) ?: "guest",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text("Auth Provider:", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(
-                        text = if (user?.isAnonymous == true) "Guest/Anonymous" else "Firebase Auth",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text("Target Exam:", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("20 Jan 2027", style = MaterialTheme.typography.labelSmall)
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = onSignOut,
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-            ) {
-                Icon(Icons.Outlined.Logout, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(6.dp))
-                Text("SIGN OUT", style = MaterialTheme.typography.labelSmall)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("CLOSE", style = MaterialTheme.typography.labelSmall)
-            }
-        }
-    )
 }
 
 @Composable
@@ -582,7 +511,8 @@ private fun StudyFocusMonitorCard(
     targetMinutes: Int,
     isTimerRunning: Boolean,
     elapsedSeconds: Int,
-    onToggleTimer: () -> Unit
+    onToggleTimer: () -> Unit,
+    onQuickAddMinutes: (Int) -> Unit
 ) {
     val mm = (elapsedSeconds / 60).toString().padStart(2, '0')
     val ss = (elapsedSeconds % 60).toString().padStart(2, '0')
@@ -592,7 +522,7 @@ private fun StudyFocusMonitorCard(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
     ) {
-        Column(modifier = Modifier.padding(18.dp)) {
+        Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -619,10 +549,21 @@ private fun StudyFocusMonitorCard(
                     )
                 ) {
                     Text(
-                        text = if (isTimerRunning) "STOP & LOG ($mm:$ss)" else "START DEEP WORK",
+                        text = if (isTimerRunning) "STOP & LOG ($mm:$ss)" else "START FOCUS",
                         style = MaterialTheme.typography.labelSmall
                     )
                 }
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                AssistChip(
+                    onClick = { onQuickAddMinutes(25) },
+                    label = { Text("+25M POMODORO", style = MaterialTheme.typography.labelSmall) }
+                )
+                AssistChip(
+                    onClick = { onQuickAddMinutes(50) },
+                    label = { Text("+50M DEEP BLOCK", style = MaterialTheme.typography.labelSmall) }
+                )
             }
         }
     }
@@ -632,9 +573,17 @@ private fun StudyFocusMonitorCard(
 private fun TrainingPillarCard(
     modality: WorkoutModality,
     isCompleted: Boolean,
+    entries: List<WorkoutEntryEntity>,
     onSwitchModality: (WorkoutModality) -> Unit,
-    onToggleComplete: (Boolean) -> Unit
+    onToggleComplete: (Boolean) -> Unit,
+    onAddSet: (String, Int, String) -> Unit,
+    onDeleteSet: (WorkoutEntryEntity) -> Unit
 ) {
+    var showAddExercise by remember { mutableStateOf(false) }
+    var exerciseName by remember { mutableStateOf("") }
+    var setsInput by remember { mutableStateOf("4") }
+    var repsInput by remember { mutableStateOf("15 Reps") }
+
     Card(
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -684,7 +633,7 @@ private fun TrainingPillarCard(
                         onClick = { onSwitchModality(item) },
                         label = {
                             Text(
-                                text = if (item == WorkoutModality.GYM) "GYM ROUTINE" else "HOME CALISTHENICS",
+                                text = if (item == WorkoutModality.GYM) "GYM ROUTINE" else "PEHLWAN / CALISTHENICS",
                                 style = MaterialTheme.typography.labelSmall
                             )
                         },
@@ -692,6 +641,64 @@ private fun TrainingPillarCard(
                             containerColor = if (selected) MaterialTheme.colorScheme.surfaceVariant else androidx.compose.ui.graphics.Color.Transparent
                         )
                     )
+                }
+                AssistChip(
+                    onClick = { showAddExercise = !showAddExercise },
+                    label = { Text("+ LOG SET", style = MaterialTheme.typography.labelSmall) }
+                )
+            }
+
+            if (showAddExercise) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = exerciseName,
+                        onValueChange = { exerciseName = it },
+                        label = { Text("Exercise (e.g. Dand / Pushups)") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = repsInput,
+                        onValueChange = { repsInput = it },
+                        label = { Text("Sets x Reps") },
+                        modifier = Modifier.width(110.dp),
+                        singleLine = true
+                    )
+                    FilledIconButton(onClick = {
+                        if (exerciseName.isNotBlank()) {
+                            onAddSet(exerciseName, setsInput.toIntOrNull() ?: 4, repsInput)
+                            exerciseName = ""
+                            showAddExercise = false
+                        }
+                    }) {
+                        Icon(Icons.Outlined.Check, contentDescription = "Save Set")
+                    }
+                }
+            }
+
+            entries.forEach { entry ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "• ${entry.exerciseName} (${entry.repsAndLoad})",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+                    IconButton(onClick = { onDeleteSet(entry) }, modifier = Modifier.size(24.dp)) {
+                        Icon(
+                            imageVector = Icons.Outlined.Close,
+                            contentDescription = "Delete",
+                            modifier = Modifier.size(14.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
         }

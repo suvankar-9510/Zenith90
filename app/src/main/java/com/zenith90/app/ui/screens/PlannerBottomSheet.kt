@@ -1,6 +1,8 @@
 package com.zenith90.app.ui.screens
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -36,6 +38,8 @@ fun PlannerBottomSheet(
     var selectedCategory by remember { mutableStateOf(BlockCategory.STUDY) }
     var selectedPriority by remember { mutableStateOf(TaskPriority.HIGH) }
 
+    val quickTags = listOf("QUANTUM MECH", "STAT PHYS", "ELECTRODYNAMICS", "SOLID STATE", "NUCLEAR PHYS", "CSIR-NET MOCK")
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         containerColor = MaterialTheme.colorScheme.surface,
@@ -46,7 +50,7 @@ fun PlannerBottomSheet(
                 .fillMaxWidth()
                 .padding(horizontal = 24.dp)
                 .padding(bottom = 36.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             Text(
                 text = "NIGHT-BEFORE BLUEPRINT ARCHITECT",
@@ -75,6 +79,24 @@ fun PlannerBottomSheet(
                     },
                     label = { Text("TODAY'S SCHEDULE", style = MaterialTheme.typography.labelSmall) }
                 )
+            }
+
+            // Quick Subject Selector Row
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                quickTags.forEach { tag ->
+                    AssistChip(
+                        onClick = {
+                            PixelHaptics.crispTick(view)
+                            subjectTag = tag
+                        },
+                        label = { Text(tag, style = MaterialTheme.typography.labelSmall) }
+                    )
+                }
             }
 
             OutlinedTextField(
@@ -120,11 +142,6 @@ fun PlannerBottomSheet(
                 )
             }
 
-            Text(
-                text = "EXAM PRIORITY WEIGHT",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TaskPriority.entries.forEach { priority ->
                     FilterChip(
@@ -137,8 +154,6 @@ fun PlannerBottomSheet(
                     )
                 }
             }
-
-            Spacer(Modifier.height(6.dp))
 
             Button(
                 onClick = {

@@ -1,13 +1,10 @@
 package com.zenith90.app.ui.viewmodel
 
-import android.app.Activity
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.zenith90.app.data.auth.AuthResult
-import com.zenith90.app.data.auth.ZenithAuthRepository
-import com.zenith90.app.data.auth.ZenithUser
 import com.zenith90.app.data.local.*
-import kotlinx.coroutines.ExperimentalCoroutinesApi
+import com.zenith90.app.data.remote.FirebaseAuthManager
+import com.zenith90.app.data.remote.ZenithUserProfile
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
@@ -17,10 +14,6 @@ import java.time.LocalTime
 import java.time.temporal.ChronoUnit
 
 data class ZenithUiState(
-    val currentUser: ZenithUser? = null,
-    val isAuthLoading: Boolean = false,
-    val authErrorMessage: String? = null,
-    val authSuccessMessage: String? = null,
     val todayDate: LocalDate = LocalDate.now(),
     val targetExamDate: LocalDate = LocalDate.of(2027, 1, 20),
     val daysRemaining: Long = 87,
@@ -34,21 +27,15 @@ data class ZenithUiState(
     val wakeStreakDays: Int = 0,
     val isFocusTimerRunning: Boolean = false,
     val activeFocusSeconds: Int = 0,
-    val focusModeLabel: String = "DEEP WORK • 50:00"
+    val userProfile: ZenithUserProfile? = null,
+    val authError: String? = null,
+    val isAuthLoading: Boolean = false,
+    val syncToastMessage: String? = null
 )
 
-private data class UserDbSnapshot(
-    val todaySnap: FullDaySnapshot?,
-    val rangeLogs: List<DailyLogEntity>,
-    val allSnaps: List<FullDaySnapshot>,
-    val badges: List<BadgeEntity>,
-    val timer: Pair<Boolean, Int>
-)
-
-@OptIn(ExperimentalCoroutinesApi::class)
 class ZenithViewModel(
     private val dao: ZenithDao,
-    private val authRepository: ZenithAuthRepository
+    private val authManager: FirebaseAuthManager
 ) : ViewModel() {
 
     private val todayEpoch = LocalDate.now().toEpochDay()
@@ -58,202 +45,129 @@ class ZenithViewModel(
 
     private var timerJob: Job? = null
     private val _timerState = MutableStateFlow(Pair(false, 0))
-    private val _isAuthLoading = MutableStateFlow(false)
-    private val _authErrorMessage = MutableStateFlow<String?>(null)
-    private val _authSuccessMessage = MutableStateFlow<String?>(null)
+    private val _authMeta = MutableStateFlow(Triple<String?, Boolean, String?>(null, false, null))
 
-    val uiState: StateFlow<ZenithUiState> = authRepository.currentUser.flatMapLatest { user ->
-        if (user == null) {
-            combine(_isAuthLoading, _authErrorMessage, _authSuccessMessage) { loading, error, success ->
-                ZenithUiState(
-                    currentUser = null,
-                    isAuthLoading = loading,
-                    authErrorMessage = error,
-                    authSuccessMessage = success
-                )
-            }
-        } else {
-            ensureUserInitialized(user.uid)
-            val userDbFlow = combine(
-                dao.observeDaySnapshot(user.uid, todayEpoch),
-                dao.observeLogsInRange(user.uid, startWindowEpoch, endWindowEpoch),
-                dao.observeAllDaySnapshotsDesc(user.uid),
-                dao.observeAllBadges(user.uid),
-                _timerState
-            ) { todaySnap, rangeLogs, allSnaps, badges, timer ->
-                UserDbSnapshot(todaySnap, rangeLogs, allSnaps, badges, timer)
-            }
+    val uiState: StateFlow<ZenithUiState> = combine(
+        dao.observeDaySnapshot(todayEpoch),
+        dao.observeLogsInRange(startWindowEpoch, endWindowEpoch),
+        dao.observeAllDaySnapshotsDesc(),
+        dao.observeAllBadges(),
+        combine(_timerState, authManager.userState, _authMeta) { t, u, m -> Triple(t, u, m) }
+    ) { todaySnap, rangeLogs, allSnaps, badges, extra ->
+        val (timer, userProfile, authMeta) = extra
+        val overallStreak = calculateOverallStreak(rangeLogs)
+        val wakeStreak = calculateWakeStreak(rangeLogs)
+        val studyStreak = calculateStudyStreak(rangeLogs)
+        val readiness = calculateReadinessPercentage(rangeLogs)
 
-            combine(
-                userDbFlow,
-                _isAuthLoading,
-                _authErrorMessage,
-                _authSuccessMessage
-            ) { db, loading, error, success ->
-                val overallStreak = calculateOverallStreak(db.rangeLogs)
-                val wakeStreak = calculateWakeStreak(db.rangeLogs)
-                val studyStreak = calculateStudyStreak(db.rangeLogs)
-                val readiness = calculateReadinessPercentage(db.rangeLogs)
-
-                ZenithUiState(
-                    currentUser = user,
-                    isAuthLoading = loading,
-                    authErrorMessage = error,
-                    authSuccessMessage = success,
-                    todayDate = LocalDate.now(),
-                    targetExamDate = examDate,
-                    daysRemaining = ChronoUnit.DAYS.between(LocalDate.now(), examDate).coerceAtLeast(0),
-                    transformationReadinessPercent = readiness,
-                    currentDaySnapshot = db.todaySnap,
-                    fourMonthHistory = db.rangeLogs,
-                    allLogsWithDetails = db.allSnaps,
-                    badges = db.badges,
-                    overallStreakDays = overallStreak,
-                    studyStreakDays = studyStreak,
-                    wakeStreakDays = wakeStreak,
-                    isFocusTimerRunning = db.timer.first,
-                    activeFocusSeconds = db.timer.second
-                )
-            }
-        }
+        ZenithUiState(
+            todayDate = LocalDate.now(),
+            targetExamDate = examDate,
+            daysRemaining = ChronoUnit.DAYS.between(LocalDate.now(), examDate).coerceAtLeast(0),
+            transformationReadinessPercent = readiness,
+            currentDaySnapshot = todaySnap,
+            fourMonthHistory = rangeLogs,
+            allLogsWithDetails = allSnaps,
+            badges = badges,
+            overallStreakDays = overallStreak,
+            studyStreakDays = studyStreak,
+            wakeStreakDays = wakeStreak,
+            isFocusTimerRunning = timer.first,
+            activeFocusSeconds = timer.second,
+            userProfile = userProfile,
+            authError = authMeta.first,
+            isAuthLoading = authMeta.second,
+            syncToastMessage = authMeta.third
+        )
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = ZenithUiState()
     )
 
-    private val currentUserId: String
-        get() = uiState.value.currentUser?.uid ?: "guest"
+    init {
+        viewModelScope.launch { ensureTodayInitialized() }
+    }
 
-    private fun ensureUserInitialized(userId: String) {
-        viewModelScope.launch {
-            val currentBadges = dao.observeAllBadges(userId).firstOrNull()
-            if (currentBadges.isNullOrEmpty()) {
-                dao.upsertBadges(ZenithDatabase.initialBadgesForUser(userId))
-            }
-            val existingToday = dao.getDailyLog(userId, todayEpoch)
-            if (existingToday == null) {
-                dao.upsertDailyLog(
-                    DailyLogEntity(
-                        logKey = DailyLogEntity.createKey(userId, todayEpoch),
-                        userId = userId,
-                        dateEpochDay = todayEpoch
-                    )
+    private suspend fun ensureTodayInitialized() {
+        val currentBadges = dao.observeAllBadges().firstOrNull()
+        if (currentBadges.isNullOrEmpty()) {
+            dao.upsertBadges(ZenithDatabase.INITIAL_BADGES)
+        }
+        val existingToday = dao.observeDaySnapshot(todayEpoch).firstOrNull()
+        if (existingToday == null) {
+            dao.upsertDailyLog(DailyLogEntity(dateEpochDay = todayEpoch))
+            dao.upsertScheduleBlock(
+                ScheduleBlockEntity(
+                    dateEpochDay = todayEpoch,
+                    startTimeMinutes = 330,
+                    durationMinutes = 30,
+                    title = "05:30 AM Circadian Hydration & Mobility",
+                    examSubjectTag = "ROUTINE",
+                    category = BlockCategory.WAKE_UP,
+                    priority = TaskPriority.HIGH
                 )
-            }
+            )
+            dao.upsertScheduleBlock(
+                ScheduleBlockEntity(
+                    dateEpochDay = todayEpoch,
+                    startTimeMinutes = 510,
+                    durationMinutes = 120,
+                    title = "Quantum Mechanics: Perturbation & WKB Method",
+                    examSubjectTag = "QUANTUM MECH",
+                    category = BlockCategory.STUDY,
+                    priority = TaskPriority.HIGH
+                )
+            )
         }
     }
 
-    // --- Authentication Actions ---
-
-    fun signInWithEmail(email: String, pass: String) {
+    // --- AUTHENTICATION & CLOUD SYNC ---
+    fun signIn(email: String, pass: String) {
         viewModelScope.launch {
-            _isAuthLoading.value = true
-            _authErrorMessage.value = null
-            when (val result = authRepository.signInWithEmail(email, pass)) {
-                is AuthResult.Success -> {
-                    _isAuthLoading.value = false
-                    ensureUserInitialized(result.user.uid)
-                }
-                is AuthResult.Error -> {
-                    _isAuthLoading.value = false
-                    _authErrorMessage.value = result.message
-                }
-            }
+            _authMeta.value = Triple(null, true, null)
+            val res = authManager.signInWithEmail(email, pass)
+            _authMeta.value = Triple(res.exceptionOrNull()?.localizedMessage, false, null)
         }
     }
 
-    fun signUpWithEmail(email: String, pass: String, displayName: String) {
+    fun signUp(name: String, email: String, pass: String) {
         viewModelScope.launch {
-            _isAuthLoading.value = true
-            _authErrorMessage.value = null
-            when (val result = authRepository.signUpWithEmail(email, pass, displayName)) {
-                is AuthResult.Success -> {
-                    _isAuthLoading.value = false
-                    ensureUserInitialized(result.user.uid)
-                }
-                is AuthResult.Error -> {
-                    _isAuthLoading.value = false
-                    _authErrorMessage.value = result.message
-                }
-            }
+            _authMeta.value = Triple(null, true, null)
+            val res = authManager.signUpWithEmail(name, email, pass)
+            _authMeta.value = Triple(res.exceptionOrNull()?.localizedMessage, false, null)
         }
     }
 
-    fun signInAnonymously() {
+    fun continueOffline(name: String) {
+        authManager.continueInOfflineMode(name = name)
+    }
+
+    fun triggerCloudSync() {
         viewModelScope.launch {
-            _isAuthLoading.value = true
-            _authErrorMessage.value = null
-            when (val result = authRepository.signInAnonymously()) {
-                is AuthResult.Success -> {
-                    _isAuthLoading.value = false
-                    ensureUserInitialized(result.user.uid)
-                }
-                is AuthResult.Error -> {
-                    _isAuthLoading.value = false
-                    _authErrorMessage.value = result.message
-                }
-            }
+            val status = authManager.syncLogsToCloud(
+                logs = uiState.value.fourMonthHistory,
+                streakDays = uiState.value.overallStreakDays
+            )
+            _authMeta.value = Triple(null, false, status)
         }
     }
 
-    fun signInWithGoogle(activity: Activity, webClientId: String? = null) {
-        viewModelScope.launch {
-            _isAuthLoading.value = true
-            _authErrorMessage.value = null
-            when (val result = authRepository.signInWithGoogleCredential(activity, webClientId)) {
-                is AuthResult.Success -> {
-                    _isAuthLoading.value = false
-                    ensureUserInitialized(result.user.uid)
-                }
-                is AuthResult.Error -> {
-                    _isAuthLoading.value = false
-                    _authErrorMessage.value = result.message
-                }
-            }
-        }
-    }
-
-    fun sendPasswordReset(email: String) {
-        viewModelScope.launch {
-            _isAuthLoading.value = true
-            when (val result = authRepository.sendPasswordReset(email)) {
-                is AuthResult.Success -> {
-                    _isAuthLoading.value = false
-                    _authSuccessMessage.value = "Password reset instructions sent to $email."
-                }
-                is AuthResult.Error -> {
-                    _isAuthLoading.value = false
-                    _authErrorMessage.value = result.message
-                }
-            }
-        }
+    fun clearSyncToast() {
+        _authMeta.update { it.copy(third = null) }
     }
 
     fun signOut() {
-        timerJob?.cancel()
-        _timerState.value = Pair(false, 0)
-        authRepository.signOut()
+        authManager.signOut()
     }
 
-    fun clearAuthMessages() {
-        _authErrorMessage.value = null
-        _authSuccessMessage.value = null
-    }
-
-    // --- Habit & Time-Block Actions (Partitioned by Current User) ---
-
+    // --- PILLARS & TASKS ---
     fun logActualWakeUpNow() {
         viewModelScope.launch {
-            val userId = currentUserId
             val now = LocalTime.now()
             val minutes = now.hour * 60 + now.minute
             val currentLog = uiState.value.currentDaySnapshot?.dailyLog
-                ?: DailyLogEntity(
-                    logKey = DailyLogEntity.createKey(userId, todayEpoch),
-                    userId = userId,
-                    dateEpochDay = todayEpoch
-                )
+                ?: DailyLogEntity(dateEpochDay = todayEpoch)
             val updated = currentLog.copy(actualWakeTimeMinutes = minutes)
             dao.upsertDailyLog(recalculateDayCompletion(updated))
             evaluateBadges()
@@ -280,13 +194,8 @@ class ZenithViewModel(
 
     fun commitStudySessionMinutes(minutesToAdd: Int) {
         viewModelScope.launch {
-            val userId = currentUserId
             val currentLog = uiState.value.currentDaySnapshot?.dailyLog
-                ?: DailyLogEntity(
-                    logKey = DailyLogEntity.createKey(userId, todayEpoch),
-                    userId = userId,
-                    dateEpochDay = todayEpoch
-                )
+                ?: DailyLogEntity(dateEpochDay = todayEpoch)
             val updated = currentLog.copy(
                 totalStudyMinutes = currentLog.totalStudyMinutes + minutesToAdd
             )
@@ -316,15 +225,10 @@ class ZenithViewModel(
         priority: TaskPriority
     ) {
         viewModelScope.launch {
-            val userId = currentUserId
-            val targetKey = DailyLogEntity.createKey(userId, targetEpochDay)
-            val targetSnap = dao.observeDaySnapshot(userId, targetEpochDay).firstOrNull()
-
+            val targetSnap = dao.observeDaySnapshot(targetEpochDay).firstOrNull()
             if (targetSnap == null) {
                 dao.upsertDailyLog(
                     DailyLogEntity(
-                        logKey = targetKey,
-                        userId = userId,
                         dateEpochDay = targetEpochDay,
                         plannedNightBeforeTimestamp = System.currentTimeMillis()
                     )
@@ -338,8 +242,6 @@ class ZenithViewModel(
             dao.upsertScheduleBlock(
                 ScheduleBlockEntity(
                     id = id,
-                    logKey = targetKey,
-                    userId = userId,
                     dateEpochDay = targetEpochDay,
                     startTimeMinutes = startTimeMinutes,
                     durationMinutes = durationMinutes,
@@ -355,55 +257,62 @@ class ZenithViewModel(
 
     fun rollOverTaskToTomorrow(block: ScheduleBlockEntity) {
         viewModelScope.launch {
-            val userId = currentUserId
             val tomorrowEpoch = todayEpoch + 1
-            val tomorrowKey = DailyLogEntity.createKey(userId, tomorrowEpoch)
-            val tomorrowSnap = dao.observeDaySnapshot(userId, tomorrowEpoch).firstOrNull()
+            val tomorrowSnap = dao.observeDaySnapshot(tomorrowEpoch).firstOrNull()
             if (tomorrowSnap == null) {
-                dao.upsertDailyLog(
-                    DailyLogEntity(
-                        logKey = tomorrowKey,
-                        userId = userId,
-                        dateEpochDay = tomorrowEpoch
-                    )
-                )
+                dao.upsertDailyLog(DailyLogEntity(dateEpochDay = tomorrowEpoch))
             }
-            dao.rescheduleBlockToNextDay(block.id, tomorrowEpoch, tomorrowKey)
+            dao.rescheduleBlockToNextDay(block.id, tomorrowEpoch)
         }
     }
 
     fun switchWorkoutModality(modality: WorkoutModality) {
         viewModelScope.launch {
-            val userId = currentUserId
             val currentLog = uiState.value.currentDaySnapshot?.dailyLog
-                ?: DailyLogEntity(
-                    logKey = DailyLogEntity.createKey(userId, todayEpoch),
-                    userId = userId,
-                    dateEpochDay = todayEpoch
-                )
+                ?: DailyLogEntity(dateEpochDay = todayEpoch)
             dao.upsertDailyLog(currentLog.copy(workoutModality = modality))
         }
     }
 
     fun toggleWorkoutComplete(completed: Boolean) {
         viewModelScope.launch {
-            val userId = currentUserId
             val currentLog = uiState.value.currentDaySnapshot?.dailyLog
-                ?: DailyLogEntity(
-                    logKey = DailyLogEntity.createKey(userId, todayEpoch),
-                    userId = userId,
-                    dateEpochDay = todayEpoch
-                )
+                ?: DailyLogEntity(dateEpochDay = todayEpoch)
             val updated = currentLog.copy(workoutCompleted = completed)
             dao.upsertDailyLog(recalculateDayCompletion(updated))
             evaluateBadges()
         }
     }
 
+    fun addWorkoutSet(exercise: String, sets: Int, repsLoad: String) {
+        viewModelScope.launch {
+            val modality = uiState.value.currentDaySnapshot?.dailyLog?.workoutModality
+                ?: WorkoutModality.GYM
+            dao.upsertWorkoutEntry(
+                WorkoutEntryEntity(
+                    dateEpochDay = todayEpoch,
+                    modality = modality,
+                    exerciseName = exercise.trim(),
+                    targetSets = sets,
+                    completedSets = sets,
+                    repsAndLoad = repsLoad.trim(),
+                    isCompleted = true
+                )
+            )
+            toggleWorkoutComplete(true)
+        }
+    }
+
+    fun deleteWorkoutSet(entry: WorkoutEntryEntity) {
+        viewModelScope.launch {
+            dao.deleteWorkoutEntry(entry)
+        }
+    }
+
     fun updateDailyReflection(note: String) {
         viewModelScope.launch {
             val currentLog = uiState.value.currentDaySnapshot?.dailyLog ?: return@launch
-            dao.upsertDailyLog(currentLog.copy(reflectionNote = note))
+            dao.upsertDailyLog(currentLog.copy(reflectionNote = note.trim()))
         }
     }
 
@@ -446,9 +355,8 @@ class ZenithViewModel(
     }
 
     private suspend fun evaluateBadges() {
-        val userId = currentUserId
-        val logs = dao.observeLogsInRange(userId, startWindowEpoch, endWindowEpoch).firstOrNull() ?: return
-        val currentBadges = dao.observeAllBadges(userId).firstOrNull() ?: return
+        val logs = dao.observeLogsInRange(startWindowEpoch, endWindowEpoch).firstOrNull() ?: return
+        val currentBadges = dao.observeAllBadges().firstOrNull() ?: return
         val wakeStreak = calculateWakeStreak(logs)
         val overallStreak = calculateOverallStreak(logs)
         val todayLog = logs.find { it.dateEpochDay == todayEpoch }

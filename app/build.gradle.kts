@@ -14,8 +14,20 @@ android {
         applicationId = "com.zenith90.app"
         minSdk = 28
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0-pixel"
+        versionCode = 2
+        versionName = "1.2.0-pixel-firebase"
+    }
+
+    buildTypes {
+        debug {
+            applicationIdSuffix = ""
+            isDebuggable = true
+        }
+        release {
+            isMinifyEnabled = false
+            // Uses debug signing config so release APK is also immediately installable on Pixel
+            signingConfig = signingConfigs.getByName("debug")
+        }
     }
 
     compileOptions {
@@ -27,6 +39,11 @@ android {
     }
     buildFeatures {
         compose = true
+    }
+    packaging {
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
     }
 }
 
@@ -42,21 +59,16 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
 
-    // Firebase BOM & Authentication
-    val firebaseBom = platform("com.google.firebase:firebase-bom:33.4.0")
-    implementation(firebaseBom)
-    implementation("com.google.firebase:firebase-auth-ktx")
-    implementation("com.google.firebase:firebase-firestore-ktx")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
-
-    // Credential Manager & Google ID for Google Sign-In
-    implementation("androidx.credentials:credentials:1.3.0")
-    implementation("androidx.credentials:credentials-play-services-auth:1.3.0")
-    implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
-
     // Room Local Persistence
     val roomVersion = "2.6.1"
     implementation("androidx.room:room-runtime:$roomVersion")
     implementation("androidx.room:room-ktx:$roomVersion")
     ksp("androidx.room:room-compiler:$roomVersion")
+
+    // Firebase Authentication & Cloud Firestore Sync
+    val firebaseBom = platform("com.google.firebase:firebase-bom:33.4.0")
+    implementation(firebaseBom)
+    implementation("com.google.firebase:firebase-auth-ktx")
+    implementation("com.google.firebase:firebase-firestore-ktx")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
 }

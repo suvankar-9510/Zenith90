@@ -42,14 +42,9 @@ enum class WorkoutModality(val displayName: String) {
     HOME_CALISTHENICS("Home Calisthenics / Bodyweight")
 }
 
-@Entity(
-    tableName = "daily_logs",
-    indices = [Index(value = ["userId", "dateEpochDay"], unique = true)]
-)
+@Entity(tableName = "daily_logs")
 data class DailyLogEntity(
-    val userId: String = "guest",
-    val dateEpochDay: Long,
-    @PrimaryKey val logKey: String = "${userId}_${dateEpochDay}",
+    @PrimaryKey val dateEpochDay: Long,
     val targetWakeTimeMinutes: Int = 330,
     val actualWakeTimeMinutes: Int? = null,
     val totalStudyMinutes: Int = 0,
@@ -68,10 +63,6 @@ data class DailyLogEntity(
 
     val isOverallStreakDay: Boolean
         get() = isWakeGoalMet && (totalStudyMinutes >= 240) && workoutCompleted
-
-    companion object {
-        fun createKey(userId: String, epochDay: Long): String = "${userId}_$epochDay"
-    }
 }
 
 @Entity(
@@ -79,18 +70,16 @@ data class DailyLogEntity(
     foreignKeys = [
         ForeignKey(
             entity = DailyLogEntity::class,
-            parentColumns = ["logKey"],
-            childColumns = ["logKey"],
+            parentColumns = ["dateEpochDay"],
+            childColumns = ["dateEpochDay"],
             onDelete = ForeignKey.CASCADE
         )
     ],
-    indices = [Index("logKey"), Index("userId")]
+    indices = [Index("dateEpochDay")]
 )
 data class ScheduleBlockEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
-    val userId: String = "guest",
-    val dateEpochDay: Long = 0,
-    val logKey: String = "${userId}_${dateEpochDay}",
+    val dateEpochDay: Long,
     val startTimeMinutes: Int,
     val durationMinutes: Int,
     val title: String,
@@ -106,18 +95,16 @@ data class ScheduleBlockEntity(
     foreignKeys = [
         ForeignKey(
             entity = DailyLogEntity::class,
-            parentColumns = ["logKey"],
-            childColumns = ["logKey"],
+            parentColumns = ["dateEpochDay"],
+            childColumns = ["dateEpochDay"],
             onDelete = ForeignKey.CASCADE
         )
     ],
-    indices = [Index("logKey"), Index("userId")]
+    indices = [Index("dateEpochDay")]
 )
 data class WorkoutEntryEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
-    val userId: String = "guest",
-    val dateEpochDay: Long = 0,
-    val logKey: String = "${userId}_${dateEpochDay}",
+    val dateEpochDay: Long,
     val modality: WorkoutModality,
     val exerciseName: String,
     val targetSets: Int,
@@ -126,14 +113,9 @@ data class WorkoutEntryEntity(
     val isCompleted: Boolean = false
 )
 
-@Entity(
-    tableName = "badges",
-    indices = [Index(value = ["userId", "badgeId"], unique = true)]
-)
+@Entity(tableName = "badges")
 data class BadgeEntity(
-    val userId: String = "guest",
-    val badgeId: String,
-    @PrimaryKey val badgeKey: String = "${userId}_${badgeId}",
+    @PrimaryKey val badgeId: String,
     val title: String,
     val subtitle: String,
     val criteriaDescription: String,
@@ -147,27 +129,24 @@ data class BadgeEntity(
 
 data class FullDaySnapshot(
     @Embedded val dailyLog: DailyLogEntity,
-    @Relation(parentColumn = "logKey", entityColumn = "logKey")
+    @Relation(parentColumn = "dateEpochDay", entityColumn = "dateEpochDay")
     val scheduleBlocks: List<ScheduleBlockEntity>,
-    @Relation(parentColumn = "logKey", entityColumn = "logKey")
+    @Relation(parentColumn = "dateEpochDay", entityColumn = "dateEpochDay")
     val workoutEntries: List<WorkoutEntryEntity>
 )
 
 @Dao
 interface ZenithDao {
     @Transaction
-    @Query("SELECT * FROM daily_logs WHERE userId = :userId AND dateEpochDay = :epochDay")
-    fun observeDaySnapshot(userId: String, epochDay: Long): Flow<FullDaySnapshot?>
+    @Query("SELECT * FROM daily_logs WHERE dateEpochDay = :epochDay")
+    fun observeDaySnapshot(epochDay: Long): Flow<FullDaySnapshot?>
 
     @Transaction
-    @Query("SELECT * FROM daily_logs WHERE userId = :userId ORDER BY dateEpochDay DESC")
-    fun observeAllDaySnapshotsDesc(userId: String): Flow<List<FullDaySnapshot>>
+    @Query("SELECT * FROM daily_logs ORDER BY dateEpochDay DESC")
+    fun observeAllDaySnapshotsDesc(): Flow<List<FullDaySnapshot>>
 
-    @Query("SELECT * FROM daily_logs WHERE userId = :userId AND dateEpochDay BETWEEN :startEpoch AND :endEpoch ORDER BY dateEpochDay ASC")
-    fun observeLogsInRange(userId: String, startEpoch: Long, endEpoch: Long): Flow<List<DailyLogEntity>>
-
-    @Query("SELECT * FROM daily_logs WHERE userId = :userId AND dateEpochDay = :epochDay LIMIT 1")
-    suspend fun getDailyLog(userId: String, epochDay: Long): DailyLogEntity?
+    @Query("SELECT * FROM daily_logs WHERE dateEpochDay BETWEEN :startEpoch AND :endEpoch ORDER BY dateEpochDay ASC")
+    fun observeLogsInRange(startEpoch: Long, endEpoch: Long): Flow<List<DailyLogEntity>>
 
     @Upsert
     suspend fun upsertDailyLog(log: DailyLogEntity)
@@ -178,8 +157,8 @@ interface ZenithDao {
     @Delete
     suspend fun deleteScheduleBlock(block: ScheduleBlockEntity)
 
-    @Query("UPDATE schedule_blocks SET dateEpochDay = :nextDayEpoch, logKey = :newLogKey, isCompleted = 0 WHERE id = :blockId")
-    suspend fun rescheduleBlockToNextDay(blockId: Long, nextDayEpoch: Long, newLogKey: String)
+    @Query("UPDATE schedule_blocks SET dateEpochDay = :nextDayEpoch, isCompleted = 0 WHERE id = :blockId")
+    suspend fun rescheduleBlockToNextDay(blockId: Long, nextDayEpoch: Long)
 
     @Upsert
     suspend fun upsertWorkoutEntry(entry: WorkoutEntryEntity)
@@ -187,8 +166,8 @@ interface ZenithDao {
     @Delete
     suspend fun deleteWorkoutEntry(entry: WorkoutEntryEntity)
 
-    @Query("SELECT * FROM badges WHERE userId = :userId ORDER BY isUnlocked DESC, progressTarget ASC")
-    fun observeAllBadges(userId: String): Flow<List<BadgeEntity>>
+    @Query("SELECT * FROM badges ORDER BY isUnlocked DESC, progressTarget ASC")
+    fun observeAllBadges(): Flow<List<BadgeEntity>>
 
     @Upsert
     suspend fun upsertBadges(badges: List<BadgeEntity>)
@@ -201,7 +180,7 @@ interface ZenithDao {
         WorkoutEntryEntity::class,
         BadgeEntity::class
     ],
-    version = 2,
+    version = 1,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -218,17 +197,12 @@ abstract class ZenithDatabase : RoomDatabase() {
                     context.applicationContext,
                     ZenithDatabase::class.java,
                     "zenith90_pixel.db"
-                )
-                .fallbackToDestructiveMigration()
-                .build()
-                .also { INSTANCE = it }
+                ).build().also { INSTANCE = it }
             }
         }
 
-        fun initialBadgesForUser(userId: String): List<BadgeEntity> = listOf(
+        val INITIAL_BADGES = listOf(
             BadgeEntity(
-                badgeKey = "${userId}_5am_club",
-                userId = userId,
                 badgeId = "5am_club",
                 title = "THE 5 AM CLUB",
                 subtitle = "Circadian Mastery",
@@ -238,8 +212,6 @@ abstract class ZenithDatabase : RoomDatabase() {
                 accentHexEnd = 0xFFFDA085
             ),
             BadgeEntity(
-                badgeKey = "${userId}_iron_and_ink",
-                userId = userId,
                 badgeId = "iron_and_ink",
                 title = "IRON & INK",
                 subtitle = "Dual Scholar-Athlete",
@@ -249,8 +221,6 @@ abstract class ZenithDatabase : RoomDatabase() {
                 accentHexEnd = 0xFF8FD3F4
             ),
             BadgeEntity(
-                badgeKey = "${userId}_night_architect",
-                userId = userId,
                 badgeId = "night_architect",
                 title = "NIGHT ARCHITECT",
                 subtitle = "Nocturnal Precision",
@@ -260,8 +230,6 @@ abstract class ZenithDatabase : RoomDatabase() {
                 accentHexEnd = 0xFFFBC2EB
             ),
             BadgeEntity(
-                badgeKey = "${userId}_relentless_30",
-                userId = userId,
                 badgeId = "relentless_30",
                 title = "RELENTLESS 30",
                 subtitle = "First Month Forged",
@@ -271,8 +239,6 @@ abstract class ZenithDatabase : RoomDatabase() {
                 accentHexEnd = 0xFFFDA085
             ),
             BadgeEntity(
-                badgeKey = "${userId}_relentless_60",
-                userId = userId,
                 badgeId = "relentless_60",
                 title = "RELENTLESS 60",
                 subtitle = "Deep Momentum",
@@ -282,8 +248,6 @@ abstract class ZenithDatabase : RoomDatabase() {
                 accentHexEnd = 0xFF8FD3F4
             ),
             BadgeEntity(
-                badgeKey = "${userId}_relentless_90",
-                userId = userId,
                 badgeId = "relentless_90",
                 title = "ZENITH 90",
                 subtitle = "Apex Readiness",
