@@ -46,6 +46,7 @@ jobs:
             echo "Found APK at $APK_PATH"
             cp "$APK_PATH" ./zenith90-debug.apk
             
+            gh release delete v1.0.0-preview --yes || true
             gh release create v1.0.0-preview ./zenith90-debug.apk \
               --title "Zenith90 v1.0.0 Preview (Debug APK)" \
               --notes "### ⚡ Zenith90 Preview APK Build
@@ -56,8 +57,7 @@ jobs:
               1. Download **\`zenith90-debug.apk\`** below on your Android device.
               2. Open the downloaded file and allow 'Install from Unknown Sources' if prompted.
               3. Launch **Zenith90** to begin testing!" \
-              --prerelease \
-              --clobber
+              --prerelease
           else
             echo "Error: APK not found!"
             exit 1
