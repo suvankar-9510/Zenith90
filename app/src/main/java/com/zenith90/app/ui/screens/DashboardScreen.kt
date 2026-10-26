@@ -9,6 +9,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -21,10 +22,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -66,6 +65,7 @@ fun DashboardScreen(
     onConfirmPomodoro: (minutes: Int, subjectTag: String) -> Unit,
     onDiscardPomodoro: () -> Unit,
     onQuickAddStudyMinutes: (Int) -> Unit,
+    onUpdateExactStudyMinutes: ((minutes: Int, targetMinutes: Int?) -> Unit)? = null,
     onSwitchWorkoutModality: (WorkoutModality) -> Unit,
     onToggleWorkoutCompleted: (Boolean) -> Unit,
     onAddWorkoutExercise: (name: String, targetSets: Int, repsAndLoad: String) -> Unit,
@@ -74,6 +74,7 @@ fun DashboardScreen(
     onToggleBlockCompletion: (ScheduleBlockEntity) -> Unit,
     onRescheduleBlockTomorrow: (ScheduleBlockEntity) -> Unit,
     onDeleteScheduleBlock: (ScheduleBlockEntity) -> Unit,
+    onSaveBlock: ((id: Long, targetEpochDay: Long, startTimeMinutes: Int, durationMinutes: Int, title: String, tag: String, category: BlockCategory, priority: TaskPriority) -> Unit)? = null,
     onOpenNightBlueprintSheet: () -> Unit,
     onUpdateUserSettings: (examTitle: String, targetDate: LocalDate, wakeMinutes: Int, studyMinutes: Int) -> Unit,
     onUpdateTodayTargets: (wakeMinutes: Int, studyMinutes: Int) -> Unit,
@@ -97,6 +98,8 @@ fun DashboardScreen(
     var showExamConfigDialog by remember { mutableStateOf(false) }
     var showTargetEditDialog by remember { mutableStateOf(false) }
     var showAddExerciseDialog by remember { mutableStateOf(false) }
+    var showEditStudyDialog by remember { mutableStateOf(false) }
+    var editingBlock by remember { mutableStateOf<ScheduleBlockEntity?>(null) }
     var pendingBoostMinutes by remember { mutableStateOf<Int?>(null) }
     var selectedBlueprintTab by remember { mutableStateOf(0) } // 0 = Today, 1 = Tomorrow
 
@@ -112,7 +115,7 @@ fun DashboardScreen(
         var selectedSubject by remember { mutableStateOf("Core Study") }
         AlertDialog(
             onDismissRequest = onDiscardPomodoro,
-            icon = { Icon(Icons.Outlined.Timer, contentDescription = null, tint = ZenithColors.MintAccent) },
+            icon = { Icon(Icons.Outlined.Timer, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
             title = {
                 Text(
                     text = "VALIDATE DEEP FOCUS SESSION",
@@ -154,9 +157,9 @@ fun DashboardScreen(
                         PixelHaptics.confirmCheck(view)
                         onConfirmPomodoro(state.pendingPomodoroMinutes, selectedSubject)
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = ZenithColors.ForestGreenPrimary)
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
-                    Text("CONFIRM & LOG", style = MaterialTheme.typography.labelSmall, color = Color.White)
+                    Text("CONFIRM & LOG", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onPrimary)
                 }
             },
             dismissButton = {
@@ -178,7 +181,7 @@ fun DashboardScreen(
 
         AlertDialog(
             onDismissRequest = { pendingBoostMinutes = null },
-            icon = { Icon(Icons.Outlined.Verified, contentDescription = null, tint = ZenithColors.MintAccent) },
+            icon = { Icon(Icons.Outlined.Verified, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
             title = {
                 Text(
                     text = "VERIFY PILLAR II DEEP BOOST (+$boostMins M)",
@@ -236,15 +239,55 @@ fun DashboardScreen(
                         onConfirmPomodoro(boostMins, "$selectedSubject • $focusIntensity")
                         pendingBoostMinutes = null
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = ZenithColors.ForestGreenPrimary)
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
-                    Text("VERIFY & CREDIT +${boostMins}M", style = MaterialTheme.typography.labelSmall, color = Color.White)
+                    Text("VERIFY & CREDIT +${boostMins}M", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onPrimary)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { pendingBoostMinutes = null }) {
                     Text("CANCEL", style = MaterialTheme.typography.labelSmall)
                 }
+            }
+        )
+    }
+
+    // --- DIALOG 1.8: COMPACT EDIT STUDY SESSION & TARGETS ---
+    if (showEditStudyDialog) {
+        CompactStudyEditorDialog(
+            currentLoggedMinutes = dayLog.totalStudyMinutes,
+            currentTargetMinutes = dayLog.targetStudyMinutes,
+            onDismiss = { showEditStudyDialog = false },
+            onConfirm = { newLoggedMins, newTargetMins ->
+                PixelHaptics.confirmCheck(view)
+                if (onUpdateExactStudyMinutes != null) {
+                    onUpdateExactStudyMinutes(newLoggedMins, newTargetMins)
+                } else {
+                    val diff = newLoggedMins - dayLog.totalStudyMinutes
+                    if (diff != 0) onQuickAddStudyMinutes(diff)
+                    if (newTargetMins != dayLog.targetStudyMinutes) onUpdateTodayTargets(dayLog.targetWakeTimeMinutes, newTargetMins)
+                }
+                showEditStudyDialog = false
+            }
+        )
+    }
+
+    // --- DIALOG: COMPACT EDIT SCHEDULE BLOCK (FOR TODAY/TOMORROW CARDS) ---
+    if (editingBlock != null) {
+        val block = editingBlock!!
+        CompactBlockEditorDialog(
+            initialBlock = block,
+            defaultEpochDay = block.dateEpochDay,
+            onDismiss = { editingBlock = null },
+            onConfirm = { id, epochDay, startMins, durMins, title, tag, category, priority ->
+                PixelHaptics.confirmCheck(view)
+                onSaveBlock?.invoke(id, epochDay, startMins, durMins, title, tag, category, priority)
+                editingBlock = null
+            },
+            onDelete = {
+                PixelHaptics.crispTick(view)
+                onDeleteScheduleBlock(block)
+                editingBlock = null
             }
         )
     }
@@ -320,9 +363,9 @@ fun DashboardScreen(
                         onUpdateUserSettings(examTitleInput, targetDate, wakeMins, studyMins)
                         showExamConfigDialog = false
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = ZenithColors.ForestGreenPrimary)
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
-                    Text("LOCK IN MY GOALS", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Color.White)
+                    Text("LOCK IN MY GOALS", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary)
                 }
             },
             dismissButton = {
@@ -377,9 +420,9 @@ fun DashboardScreen(
                         onUpdateTodayTargets(todayWakeMins.toInt(), (todayStudyHrs * 60).toInt())
                         showTargetEditDialog = false
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = ZenithColors.ForestGreenPrimary)
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
-                    Text("APPLY TODAY", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Color.White)
+                    Text("APPLY TODAY", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary)
                 }
             },
             dismissButton = {
@@ -446,9 +489,9 @@ fun DashboardScreen(
                         }
                     },
                     enabled = exerciseName.isNotBlank(),
-                    colors = ButtonDefaults.buttonColors(containerColor = ZenithColors.ForestGreenPrimary)
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
-                    Text("ADD EXERCISE", style = MaterialTheme.typography.labelSmall, color = Color.White)
+                    Text("ADD EXERCISE", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onPrimary)
                 }
             },
             dismissButton = {
@@ -485,7 +528,7 @@ fun DashboardScreen(
                     Text(
                         text = "Status: ${state.userProfile?.lastSyncedStatus ?: "Local SQLite Active"}",
                         style = MaterialTheme.typography.labelSmall,
-                        color = ZenithColors.ForestGreenPrimary
+                        color = MaterialTheme.colorScheme.primary
                     )
                     OutlinedButton(
                         onClick = {
@@ -508,11 +551,11 @@ fun DashboardScreen(
                         onTriggerCloudSync()
                         showProfileDialog = false
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = ZenithColors.ForestGreenPrimary)
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
                     Icon(Icons.Outlined.CloudUpload, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text("SYNC TO FIREBASE", style = MaterialTheme.typography.labelSmall, color = Color.White)
+                    Text("SYNC TO FIREBASE", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onPrimary)
                 }
             },
             dismissButton = {
@@ -529,12 +572,12 @@ fun DashboardScreen(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .background(ZenithColors.BotanicalBg)
+            .background(MaterialTheme.colorScheme.background)
             .padding(horizontal = 20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
         contentPadding = PaddingValues(top = 18.dp, bottom = 100.dp)
     ) {
-        // --- 1. BOTANICAL TOP GREETING HEADER (Matches Center Screen) ---
+        // --- 1. TOP GREETING HEADER ---
         item {
             BotanicalTopHeader(
                 userName = state.userProfile?.displayName ?: "Scholar",
@@ -549,7 +592,7 @@ fun DashboardScreen(
             )
         }
 
-        // --- 2. "CREATE NEW TASK / BLUEPRINT" HERO BANNER (Matches Center Screen) ---
+        // --- 2. "CREATE NEW TASK / BLUEPRINT" HERO BANNER ---
         item {
             CreateNewTaskBanner(
                 onClick = {
@@ -563,15 +606,20 @@ fun DashboardScreen(
             )
         }
 
-        // --- 3. 2x2 "SUMMARY" GRID (Matches Center Screen) ---
+        // --- 3. 2x2 "SUMMARY" GRID (WITH CIRCULAR COLOR FILLING) ---
         item {
+            val totalTargetSets = workoutEntries.sumOf { it.targetSets }
+            val completedSets = workoutEntries.sumOf { it.completedSets }
+
             SummaryGridSection(
                 targetWakeMinutes = dayLog.targetWakeTimeMinutes,
                 actualWakeMinutes = dayLog.actualWakeTimeMinutes,
+                isWakeGoalMet = dayLog.isWakeGoalMet,
                 totalStudyMinutes = dayLog.totalStudyMinutes,
                 targetStudyMinutes = dayLog.targetStudyMinutes,
                 workoutCompleted = dayLog.workoutCompleted,
-                workoutSetsCount = workoutEntries.sumOf { it.completedSets },
+                totalTargetSets = totalTargetSets,
+                workoutSetsCount = completedSets,
                 equilibriumRatio = dayLog.completionRatio,
                 onTuneTargets = {
                     PixelHaptics.crispTick(view)
@@ -580,7 +628,7 @@ fun DashboardScreen(
             )
         }
 
-        // --- 4. "ACTIVITY" WEEKLY BAR CHART (Matches Center Screen) ---
+        // --- 4. "ACTIVITY" WEEKLY BAR CHART ---
         item {
             ActivityWeeklyChartCard(
                 historyLogs = state.fourMonthHistory,
@@ -590,7 +638,7 @@ fun DashboardScreen(
             )
         }
 
-        // --- 5. PILLAR II: DEEP FOCUS ENGINE & POMODORO (Breathing animation) ---
+        // --- 5. PILLAR II: DEEP FOCUS ENGINE & POMODORO (COMPACT & EDITABLE) ---
         item {
             BotanicalFocusMonitorCard(
                 loggedMinutes = dayLog.totalStudyMinutes,
@@ -604,6 +652,10 @@ fun DashboardScreen(
                 onQuickAddMinutes = { mins ->
                     PixelHaptics.crispTick(view)
                     pendingBoostMinutes = mins
+                },
+                onOpenEdit = {
+                    PixelHaptics.crispTick(view)
+                    showEditStudyDialog = true
                 }
             )
         }
@@ -657,16 +709,16 @@ fun DashboardScreen(
                     Text(
                         text = "TIME-BLOCKED BLUEPRINT ARCHITECT",
                         style = MaterialTheme.typography.labelSmall,
-                        color = ZenithColors.TextMuted,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontWeight = FontWeight.Bold
                     )
                     TextButton(onClick = {
                         PixelHaptics.crispTick(view)
                         onOpenNightBlueprintSheet()
                     }) {
-                        Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(16.dp), tint = ZenithColors.ForestGreenPrimary)
+                        Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
                         Spacer(Modifier.width(4.dp))
-                        Text("+ NIGHT PLANNER", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = ZenithColors.ForestGreenPrimary)
+                        Text("+ NIGHT PLANNER", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                     }
                 }
 
@@ -675,7 +727,7 @@ fun DashboardScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(16.dp))
-                        .background(ZenithColors.BotanicalSurface)
+                        .background(MaterialTheme.colorScheme.surface)
                         .padding(4.dp)
                 ) {
                     val todayActive = selectedBlueprintTab == 0
@@ -685,8 +737,8 @@ fun DashboardScreen(
                             selectedBlueprintTab = 0
                         },
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = if (todayActive) ZenithColors.ForestGreenPrimary else Color.Transparent,
-                            contentColor = if (todayActive) Color.White else ZenithColors.TextMuted
+                            containerColor = if (todayActive) MaterialTheme.colorScheme.primary else Color.Transparent,
+                            contentColor = if (todayActive) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
                         ),
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.weight(1f)
@@ -699,8 +751,8 @@ fun DashboardScreen(
                             selectedBlueprintTab = 1
                         },
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = if (!todayActive) ZenithColors.ForestGreenPrimary else Color.Transparent,
-                            contentColor = if (!todayActive) Color.White else ZenithColors.TextMuted
+                            containerColor = if (!todayActive) MaterialTheme.colorScheme.primary else Color.Transparent,
+                            contentColor = if (!todayActive) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
                         ),
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.weight(1f)
@@ -732,6 +784,10 @@ fun DashboardScreen(
                     onRollOverTomorrow = {
                         PixelHaptics.crispTick(view)
                         onRescheduleBlockTomorrow(block)
+                    },
+                    onEditBlock = {
+                        PixelHaptics.crispTick(view)
+                        editingBlock = block
                     },
                     onDeleteBlock = {
                         PixelHaptics.crispTick(view)
@@ -769,33 +825,33 @@ private fun BotanicalTopHeader(
             Text(
                 text = greeting,
                 style = MaterialTheme.typography.bodySmall,
-                color = ZenithColors.TextMuted,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontWeight = FontWeight.Medium
             )
             Text(
                 text = userName,
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
-                color = ZenithColors.TextHeading
+                color = MaterialTheme.colorScheme.onSurface
             )
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            // Notification Bell Button with Notification Status Indicator
+            // Notification Bell Button
             Surface(
                 modifier = Modifier
                     .size(46.dp)
                     .clip(CircleShape)
                     .clickable { onNotificationClick() },
                 shape = CircleShape,
-                color = ZenithColors.BotanicalSurface,
-                border = BorderStroke(1.dp, ZenithColors.BotanicalBorder)
+                color = MaterialTheme.colorScheme.surface,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
                         imageVector = Icons.Outlined.Notifications,
                         contentDescription = "Notifications",
-                        tint = ZenithColors.TextHeading,
+                        tint = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.size(22.dp)
                     )
                     // Notification Active Pill Dot
@@ -805,7 +861,7 @@ private fun BotanicalTopHeader(
                             .padding(top = 10.dp, end = 12.dp)
                             .size(7.dp)
                             .clip(CircleShape)
-                            .background(ZenithColors.MintAccent)
+                            .background(MaterialTheme.colorScheme.primary)
                     )
                 }
             }
@@ -817,14 +873,14 @@ private fun BotanicalTopHeader(
                     .clip(CircleShape)
                     .clickable { onProfileClick() },
                 shape = CircleShape,
-                color = ZenithColors.BotanicalSurface,
-                border = BorderStroke(1.dp, ZenithColors.BotanicalBorder)
+                color = MaterialTheme.colorScheme.surface,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
                         imageVector = Icons.Outlined.Apps,
                         contentDescription = "Profile & Settings",
-                        tint = ZenithColors.TextHeading,
+                        tint = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.size(22.dp)
                     )
                 }
@@ -837,8 +893,8 @@ private fun BotanicalTopHeader(
 private fun CreateNewTaskBanner(onClick: () -> Unit) {
     Card(
         shape = RoundedCornerShape(26.dp),
-        colors = CardDefaults.cardColors(containerColor = ZenithColors.BotanicalSurface),
-        border = BorderStroke(1.dp, ZenithColors.BotanicalBorder),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)),
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() }
@@ -848,18 +904,17 @@ private fun CreateNewTaskBanner(onClick: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Dark Forest Green Circular Icon Badge
             Box(
                 modifier = Modifier
                     .size(48.dp)
                     .clip(CircleShape)
-                    .background(ZenithColors.ForestGreenPrimary),
+                    .background(MaterialTheme.colorScheme.primary),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = Icons.Outlined.CalendarToday,
                     contentDescription = null,
-                    tint = Color.White,
+                    tint = MaterialTheme.colorScheme.onPrimary,
                     modifier = Modifier.size(22.dp)
                 )
             }
@@ -869,19 +924,19 @@ private fun CreateNewTaskBanner(onClick: () -> Unit) {
                     text = "Create New Task",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = ZenithColors.TextHeading
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
                     text = "You can create new task here",
                     style = MaterialTheme.typography.bodySmall,
-                    color = ZenithColors.TextMuted
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
             Icon(
                 imageVector = Icons.Filled.ArrowForward,
                 contentDescription = null,
-                tint = ZenithColors.TextHeading,
+                tint = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.size(18.dp)
             )
         }
@@ -892,13 +947,20 @@ private fun CreateNewTaskBanner(onClick: () -> Unit) {
 private fun SummaryGridSection(
     targetWakeMinutes: Int,
     actualWakeMinutes: Int?,
+    isWakeGoalMet: Boolean,
     totalStudyMinutes: Int,
     targetStudyMinutes: Int,
     workoutCompleted: Boolean,
+    totalTargetSets: Int,
     workoutSetsCount: Int,
     equilibriumRatio: Float,
     onTuneTargets: () -> Unit
 ) {
+    val wakeProgress = if (isWakeGoalMet) 1f else if (actualWakeMinutes != null) 0.5f else 0.15f
+    val studyProgress = (totalStudyMinutes.toFloat() / targetStudyMinutes.coerceAtLeast(1).toFloat()).coerceIn(0f, 1f)
+    val workoutProgress = if (workoutCompleted) 1f else if (totalTargetSets > 0) (workoutSetsCount.toFloat() / totalTargetSets.toFloat()).coerceIn(0f, 1f) else 0f
+    val eqProgress = equilibriumRatio.coerceIn(0f, 1f)
+
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -909,29 +971,30 @@ private fun SummaryGridSection(
                 text = "Summary",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                color = ZenithColors.TextHeading
+                color = MaterialTheme.colorScheme.onSurface
             )
             IconButton(onClick = onTuneTargets) {
                 Icon(
                     imageVector = Icons.Outlined.Tune,
                     contentDescription = "Edit Daily Targets",
-                    tint = ZenithColors.TextMuted,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(20.dp)
                 )
             }
         }
 
-        // 2x2 Grid
+        // 2x2 Grid with Circular Color Filling
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // Card 1: Wake Target
+            // Card 1: Wake Anchor
             SummaryTile(
                 modifier = Modifier.weight(1f),
-                badgeColor = ZenithColors.PastelMint,
+                fillProgress = wakeProgress,
+                fillColor = MaterialTheme.colorScheme.primary,
                 icon = Icons.Outlined.WbSunny,
-                iconTint = ZenithColors.PastelMintText,
+                iconTint = MaterialTheme.colorScheme.primary,
                 title = "Wake Anchor",
                 value = actualWakeMinutes?.let { formatMinutesToTime(it) } ?: formatMinutesToTime(targetWakeMinutes)
             )
@@ -939,7 +1002,8 @@ private fun SummaryGridSection(
             // Card 2: Deep Study
             SummaryTile(
                 modifier = Modifier.weight(1f),
-                badgeColor = ZenithColors.PastelLilac,
+                fillProgress = studyProgress,
+                fillColor = ZenithColors.PastelLilacAccent,
                 icon = Icons.Outlined.AutoStories,
                 iconTint = ZenithColors.PastelLilacText,
                 title = "Deep Study",
@@ -951,10 +1015,11 @@ private fun SummaryGridSection(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // Card 3: Conditioning / Workouts
+            // Card 3: Conditioning
             SummaryTile(
                 modifier = Modifier.weight(1f),
-                badgeColor = ZenithColors.PastelRose,
+                fillProgress = workoutProgress,
+                fillColor = ZenithColors.PastelRoseAccent,
                 icon = Icons.Outlined.FitnessCenter,
                 iconTint = ZenithColors.PastelRoseText,
                 title = "Conditioning",
@@ -964,7 +1029,8 @@ private fun SummaryGridSection(
             // Card 4: Equilibrium
             SummaryTile(
                 modifier = Modifier.weight(1f),
-                badgeColor = ZenithColors.PastelAmber,
+                fillProgress = eqProgress,
+                fillColor = ZenithColors.PastelAmberAccent,
                 icon = Icons.Outlined.Bolt,
                 iconTint = ZenithColors.PastelAmberText,
                 title = "Equilibrium",
@@ -977,33 +1043,80 @@ private fun SummaryGridSection(
 @Composable
 private fun SummaryTile(
     modifier: Modifier = Modifier,
-    badgeColor: Color,
+    fillProgress: Float,
+    fillColor: Color,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     iconTint: Color,
     title: String,
     value: String
 ) {
+    val animatedProgress by animateFloatAsState(
+        targetValue = fillProgress.coerceIn(0f, 1f),
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "tileFillProgress"
+    )
+
     Card(
         modifier = modifier,
         shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = ZenithColors.BotanicalSurface),
-        border = BorderStroke(1.dp, ZenithColors.BotanicalBorder)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
+            // Circular Indicator with Color Filling
             Box(
-                modifier = Modifier
-                    .size(38.dp)
-                    .clip(CircleShape)
-                    .background(badgeColor),
+                modifier = Modifier.size(46.dp),
                 contentAlignment = Alignment.Center
             ) {
+                val trackColor = fillColor.copy(alpha = 0.16f)
+                val fillBg = fillColor.copy(alpha = 0.12f + (animatedProgress * 0.25f))
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    val strokeWidth = 3.5.dp.toPx()
+                    val diameter = size.minDimension - strokeWidth
+                    val topLeft = Offset(strokeWidth / 2f, strokeWidth / 2f)
+                    val arcSize = Size(diameter, diameter)
+
+                    // Inner circle color filling
+                    drawCircle(
+                        color = fillBg,
+                        radius = (diameter / 2f) - (strokeWidth / 2f)
+                    )
+
+                    // Track background ring
+                    drawArc(
+                        color = trackColor,
+                        startAngle = -90f,
+                        sweepAngle = 360f,
+                        useCenter = false,
+                        topLeft = topLeft,
+                        size = arcSize,
+                        style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+                    )
+
+                    // Dynamic sweep color filling arc
+                    if (animatedProgress > 0f) {
+                        drawArc(
+                            color = fillColor,
+                            startAngle = -90f,
+                            sweepAngle = 360f * animatedProgress,
+                            useCenter = false,
+                            topLeft = topLeft,
+                            size = arcSize,
+                            style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
+                        )
+                    }
+                }
+
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = iconTint,
+                    tint = if (animatedProgress >= 0.99f) fillColor else iconTint,
                     modifier = Modifier.size(20.dp)
                 )
             }
@@ -1016,14 +1129,14 @@ private fun SummaryTile(
                 Text(
                     text = title,
                     style = MaterialTheme.typography.bodySmall,
-                    color = ZenithColors.TextMuted,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontWeight = FontWeight.Medium
                 )
                 Text(
                     text = value,
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.ExtraBold,
-                    color = ZenithColors.TextHeading
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
         }
@@ -1037,8 +1150,7 @@ private fun ActivityWeeklyChartCard(
     todayStudyMinutes: Int,
     targetStudyMinutes: Int
 ) {
-    // Determine the 7 days of the current week (Sunday to Saturday)
-    val dayOfWeek = todayDate.dayOfWeek.value % 7 // 0 for Sunday, 1 for Mon...
+    val dayOfWeek = todayDate.dayOfWeek.value % 7
     val startOfWeek = todayDate.minusDays(dayOfWeek.toLong())
     val weekDays = (0..6).map { startOfWeek.plusDays(it.toLong()) }
     val logMap = historyLogs.associateBy { it.dateEpochDay }
@@ -1053,15 +1165,14 @@ private fun ActivityWeeklyChartCard(
 
     Card(
         shape = RoundedCornerShape(26.dp),
-        colors = CardDefaults.cardColors(containerColor = ZenithColors.BotanicalSurface),
-        border = BorderStroke(1.dp, ZenithColors.BotanicalBorder),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
             modifier = Modifier.padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
-            // Top Header: Dark green circle + Title "Activity" + Subtitle
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -1075,13 +1186,13 @@ private fun ActivityWeeklyChartCard(
                         modifier = Modifier
                             .size(44.dp)
                             .clip(CircleShape)
-                            .background(ZenithColors.ForestGreenPrimary),
+                            .background(MaterialTheme.colorScheme.primary),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Outlined.DirectionsRun,
                             contentDescription = null,
-                            tint = Color.White,
+                            tint = MaterialTheme.colorScheme.onPrimary,
                             modifier = Modifier.size(22.dp)
                         )
                     }
@@ -1091,12 +1202,12 @@ private fun ActivityWeeklyChartCard(
                             text = "Activity",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = ZenithColors.TextHeading
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
                             text = "${totalWeeklyHours}h ${totalWeeklyMinutesRemain}m on this week.",
                             style = MaterialTheme.typography.bodySmall,
-                            color = ZenithColors.TextMuted
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -1104,12 +1215,12 @@ private fun ActivityWeeklyChartCard(
                 Icon(
                     imageVector = Icons.Filled.ArrowForward,
                     contentDescription = null,
-                    tint = ZenithColors.TextHeading,
+                    tint = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.size(16.dp)
                 )
             }
 
-            // 7-Day Vertical Pill Bar Chart (Matches Center Screen)
+            // 7-Day Vertical Pill Bar Chart
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1142,47 +1253,43 @@ private fun ActivityWeeklyChartCard(
                                 .fillMaxWidth(),
                             contentAlignment = Alignment.BottomCenter
                         ) {
-                            // Dotted/grid background line
                             Canvas(modifier = Modifier.fillMaxHeight().width(2.dp)) {
                                 drawLine(
-                                    color = ZenithColors.BotanicalBorder,
+                                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f),
                                     start = Offset(0f, 0f),
                                     end = Offset(0f, size.height),
                                     strokeWidth = 1.dp.toPx()
                                 )
                             }
 
-                            // The Vertical Pill Bar
                             Box(
                                 modifier = Modifier
                                     .width(22.dp)
                                     .fillMaxHeight(animatedFraction)
                                     .clip(RoundedCornerShape(12.dp))
                                     .background(
-                                        if (isToday) ZenithColors.ForestGreenPrimary
-                                        else ZenithColors.PastelMint
+                                        if (isToday) MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.primaryContainer
                                     ),
                                 contentAlignment = Alignment.TopCenter
                             ) {
                                 if (isToday) {
-                                    // Top indicator dot on today's bar
                                     Box(
                                         modifier = Modifier
                                             .padding(top = 4.dp)
                                             .size(5.dp)
                                             .clip(CircleShape)
-                                            .background(Color.White)
+                                            .background(MaterialTheme.colorScheme.onPrimary)
                                     )
                                 }
                             }
                         }
 
-                        // Day label below (Sun, Mon, Tue...)
                         Text(
                             text = date.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.ENGLISH),
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = if (isToday) FontWeight.ExtraBold else FontWeight.Medium,
-                            color = if (isToday) ZenithColors.ForestGreenPrimary else ZenithColors.TextMuted,
+                            color = if (isToday) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                             fontSize = 11.sp
                         )
                     }
@@ -1192,6 +1299,7 @@ private fun ActivityWeeklyChartCard(
     }
 }
 
+// --- COMPACT & HIGHLY EDITABLE STUDY FOCUS CARD ---
 @Composable
 private fun BotanicalFocusMonitorCard(
     loggedMinutes: Int,
@@ -1199,98 +1307,241 @@ private fun BotanicalFocusMonitorCard(
     isTimerRunning: Boolean,
     activeSeconds: Int,
     onToggleTimer: () -> Unit,
-    onQuickAddMinutes: (Int) -> Unit
+    onQuickAddMinutes: (Int) -> Unit,
+    onOpenEdit: () -> Unit
 ) {
-    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
-    val pulseScale by infiniteTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = if (isTimerRunning) 1.08f else 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1200, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "pulseScale"
-    )
+    val progress = (loggedMinutes.toFloat() / targetMinutes.coerceAtLeast(1).toFloat()).coerceIn(0f, 1f)
 
     Card(
-        shape = RoundedCornerShape(26.dp),
-        colors = CardDefaults.cardColors(containerColor = ZenithColors.BotanicalSurface),
-        border = BorderStroke(1.dp, ZenithColors.BotanicalBorder),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
-            modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            modifier = Modifier.padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
+            // Top Row: Category Label + Edit Button + Pomodoro Timer
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
                     Text(
-                        text = "PILLAR II • DEEP STUDY ENGINE",
+                        text = "PILLAR II • DEEP STUDY",
                         style = MaterialTheme.typography.labelSmall,
-                        color = ZenithColors.TextMuted,
-                        fontWeight = FontWeight.Bold
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.ExtraBold
                     )
-                    Text(
-                        text = "${loggedMinutes / 60}h ${loggedMinutes % 60}m / ${targetMinutes / 60}h Target",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = ZenithColors.TextHeading
-                    )
+                    IconButton(
+                        onClick = onOpenEdit,
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Edit,
+                            contentDescription = "Edit Study Session",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(15.dp)
+                        )
+                    }
                 }
 
-                // Play / Stop Pill Button
                 Button(
                     onClick = onToggleTimer,
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isTimerRunning) ZenithColors.PastelRoseText else ZenithColors.ForestGreenPrimary
+                        containerColor = if (isTimerRunning) ZenithColors.PastelRoseText else MaterialTheme.colorScheme.primary
                     ),
-                    shape = RoundedCornerShape(16.dp),
-                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
+                    shape = RoundedCornerShape(14.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                 ) {
                     Icon(
                         imageVector = if (isTimerRunning) Icons.Outlined.Stop else Icons.Outlined.PlayArrow,
                         contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                        tint = Color.White
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.onPrimary
                     )
-                    Spacer(Modifier.width(6.dp))
+                    Spacer(Modifier.width(4.dp))
                     Text(
-                        text = if (isTimerRunning) "%02d:%02d".format(activeSeconds / 60, activeSeconds % 60) else "POMODORO (25M)",
+                        text = if (isTimerRunning) "%02d:%02d".format(activeSeconds / 60, activeSeconds % 60) else "POMODORO",
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White
+                        color = MaterialTheme.colorScheme.onPrimary
                     )
                 }
             }
 
-            // Quick study boost buttons (+25m, +50m) with Verification
+            // Middle: Big Duration Readout & Target Indicator
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Bottom
             ) {
-                OutlinedButton(
-                    onClick = { onQuickAddMinutes(25) },
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(14.dp),
-                    border = BorderStroke(1.dp, ZenithColors.BotanicalBorder)
-                ) {
-                    Text("+25M BOOST", style = MaterialTheme.typography.labelSmall, color = ZenithColors.ForestGreenPrimary, fontWeight = FontWeight.Bold)
+                Text(
+                    text = "${loggedMinutes / 60}h ${loggedMinutes % 60}m",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Black,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = "Target: ${targetMinutes / 60}h (${(progress * 100).toInt()}%)",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+
+            // Compact Linear Progress Bar with Rounded Ends
+            LinearProgressIndicator(
+                progress = { progress },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(6.dp)
+                    .clip(CircleShape),
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+            )
+
+            // Compact Quick Add & Edit Chips
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                listOf(15, 25, 45, 60).forEach { mins ->
+                    SuggestionChip(
+                        onClick = { onQuickAddMinutes(mins) },
+                        label = { Text("+$mins m", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold) },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp)
+                    )
                 }
-                OutlinedButton(
-                    onClick = { onQuickAddMinutes(50) },
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(14.dp),
-                    border = BorderStroke(1.dp, ZenithColors.BotanicalBorder)
-                ) {
-                    Text("+50M BOOST", style = MaterialTheme.typography.labelSmall, color = ZenithColors.ForestGreenPrimary, fontWeight = FontWeight.Bold)
-                }
+                SuggestionChip(
+                    onClick = onOpenEdit,
+                    label = { Text("✏️ Edit", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold) },
+                    modifier = Modifier.weight(1.2f),
+                    shape = RoundedCornerShape(10.dp)
+                )
             }
         }
     }
+}
+
+// --- COMPACT STUDY SESSION & TARGET EDITOR DIALOG ---
+@Composable
+private fun CompactStudyEditorDialog(
+    currentLoggedMinutes: Int,
+    currentTargetMinutes: Int,
+    onDismiss: () -> Unit,
+    onConfirm: (newLoggedMinutes: Int, newTargetMinutes: Int) -> Unit
+) {
+    var loggedMins by remember { mutableIntStateOf(currentLoggedMinutes) }
+    var targetMins by remember { mutableIntStateOf(currentTargetMinutes) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "EDIT STUDY TIME & TARGET",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                // Logged Time Stepper
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text = "Logged Study Time Today:",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "${loggedMins / 60}h ${loggedMins % 60}m ($loggedMins mins)",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            FilledTonalButton(
+                                onClick = { loggedMins = (loggedMins - 15).coerceAtLeast(0) },
+                                contentPadding = PaddingValues(horizontal = 8.dp),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text("-15m", style = MaterialTheme.typography.labelSmall)
+                            }
+                            Button(
+                                onClick = { loggedMins += 15 },
+                                contentPadding = PaddingValues(horizontal = 8.dp),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text("+15m", style = MaterialTheme.typography.labelSmall)
+                            }
+                            Button(
+                                onClick = { loggedMins += 30 },
+                                contentPadding = PaddingValues(horizontal = 8.dp),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text("+30m", style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                    }
+                }
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
+
+                // Target Hours Stepper
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text = "Today's Study Goal / Target:",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "${targetMins / 60}h Target",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            listOf(4, 6, 8, 10).forEach { hrs ->
+                                FilterChip(
+                                    selected = targetMins == hrs * 60,
+                                    onClick = { targetMins = hrs * 60 },
+                                    label = { Text("${hrs}h", style = MaterialTheme.typography.labelSmall) }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(loggedMins, targetMins) },
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+            ) {
+                Text("SAVE CHANGES", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onPrimary)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("CANCEL", style = MaterialTheme.typography.labelSmall)
+            }
+        }
+    )
 }
 
 @Composable
@@ -1301,8 +1552,8 @@ private fun BotanicalWakeAnchorCard(
 ) {
     Card(
         shape = RoundedCornerShape(26.dp),
-        colors = CardDefaults.cardColors(containerColor = ZenithColors.BotanicalSurface),
-        border = BorderStroke(1.dp, ZenithColors.BotanicalBorder),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
@@ -1318,28 +1569,28 @@ private fun BotanicalWakeAnchorCard(
                     Text(
                         text = "PILLAR I • CIRCADIAN WAKE ANCHOR",
                         style = MaterialTheme.typography.labelSmall,
-                        color = ZenithColors.TextMuted,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
                         text = "Target: ${formatMinutesToTime(targetMinutes)}",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = ZenithColors.TextHeading
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 }
                 if (actualMinutes != null) {
                     val deviation = actualMinutes - targetMinutes
                     Surface(
                         shape = RoundedCornerShape(12.dp),
-                        color = if (deviation <= 15) ZenithColors.PastelMint else ZenithColors.PastelRose
+                        color = if (deviation <= 15) MaterialTheme.colorScheme.primaryContainer else ZenithColors.PastelRose
                     ) {
                         Text(
                             text = if (deviation <= 0) "MET (${-deviation}m early)" else if (deviation <= 15) "MET (+${deviation}m)" else "LATE (+${deviation}m)",
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
-                            color = if (deviation <= 15) ZenithColors.PastelMintText else ZenithColors.PastelRoseText
+                            color = if (deviation <= 15) MaterialTheme.colorScheme.onPrimaryContainer else ZenithColors.PastelRoseText
                         )
                     }
                 }
@@ -1350,17 +1601,17 @@ private fun BotanicalWakeAnchorCard(
                     onClick = onLogWakeNow,
                     modifier = Modifier.fillMaxWidth().height(46.dp),
                     shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = ZenithColors.ForestGreenPrimary)
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
-                    Icon(Icons.Outlined.WbSunny, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color.White)
+                    Icon(Icons.Outlined.WbSunny, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onPrimary)
                     Spacer(Modifier.width(8.dp))
-                    Text("LOG WAKE-UP NOW", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Color.White)
+                    Text("LOG WAKE-UP NOW", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary)
                 }
             } else {
                 Text(
                     text = "Logged today at ${formatMinutesToTime(actualMinutes)}",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = ZenithColors.TextMuted
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -1380,8 +1631,8 @@ private fun BotanicalTrainingCard(
 ) {
     Card(
         shape = RoundedCornerShape(26.dp),
-        colors = CardDefaults.cardColors(containerColor = ZenithColors.BotanicalSurface),
-        border = BorderStroke(1.dp, ZenithColors.BotanicalBorder),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
@@ -1397,14 +1648,14 @@ private fun BotanicalTrainingCard(
                     Text(
                         text = "PILLAR III • PHYSICAL CONDITIONING",
                         style = MaterialTheme.typography.labelSmall,
-                        color = ZenithColors.TextMuted,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
                         text = modality.displayName,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = ZenithColors.TextHeading
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 }
                 FilterChip(
@@ -1446,7 +1697,7 @@ private fun BotanicalTrainingCard(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(14.dp))
-                        .background(ZenithColors.BotanicalBg)
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
                         .padding(12.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
@@ -1456,12 +1707,12 @@ private fun BotanicalTrainingCard(
                             text = entry.exerciseName,
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.SemiBold,
-                            color = ZenithColors.TextHeading
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
                             text = "${entry.completedSets}/${entry.targetSets} sets • ${entry.repsAndLoad}",
                             style = MaterialTheme.typography.bodySmall,
-                            color = ZenithColors.TextMuted
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
 
@@ -1476,7 +1727,7 @@ private fun BotanicalTrainingCard(
                             onClick = { onDeleteSet(entry) },
                             modifier = Modifier.size(34.dp)
                         ) {
-                            Icon(Icons.Outlined.Delete, contentDescription = "Delete", modifier = Modifier.size(16.dp), tint = ZenithColors.TextMuted)
+                            Icon(Icons.Outlined.Delete, contentDescription = "Delete", modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
@@ -1486,11 +1737,11 @@ private fun BotanicalTrainingCard(
                 onClick = onOpenAddExercise,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(14.dp),
-                border = BorderStroke(1.dp, ZenithColors.BotanicalBorder)
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
             ) {
-                Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(16.dp), tint = ZenithColors.ForestGreenPrimary)
+                Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.width(6.dp))
-                Text("ADD EXERCISE", style = MaterialTheme.typography.labelSmall, color = ZenithColors.ForestGreenPrimary, fontWeight = FontWeight.Bold)
+                Text("ADD EXERCISE", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
             }
         }
     }
@@ -1502,12 +1753,12 @@ private fun ScheduleBlockItemCard(
     isTomorrowView: Boolean,
     onToggle: () -> Unit,
     onRollOverTomorrow: () -> Unit,
+    onEditBlock: () -> Unit,
     onDeleteBlock: () -> Unit
 ) {
     val startTimeStr = formatMinutesToTime(block.startTimeMinutes)
     val endTimeStr = formatMinutesToTime(block.startTimeMinutes + block.durationMinutes)
 
-    // Select pastel tint based on category / priority (matching reference screen)
     val (cardBg, cardText, cardAccent) = when (block.category) {
         BlockCategory.STUDY -> if (block.priority == TaskPriority.HIGH) {
             Triple(ZenithColors.PastelRose, ZenithColors.PastelRoseText, ZenithColors.PastelRoseAccent)
@@ -1527,14 +1778,14 @@ private fun ScheduleBlockItemCard(
         Row(
             modifier = Modifier.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(14.dp)
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Category Icon Avatar (Matches avatar in screenshot)
+            // Category Avatar Circle
             Box(
                 modifier = Modifier
                     .size(42.dp)
                     .clip(CircleShape)
-                    .background(Color.White.copy(alpha = 0.8f)),
+                    .background(Color.White.copy(alpha = 0.85f)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
@@ -1550,12 +1801,17 @@ private fun ScheduleBlockItemCard(
                 )
             }
 
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable { onEditBlock() },
+                verticalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
                 Text(
                     text = block.title,
                     style = MaterialTheme.typography.bodyMedium.copy(
                         textDecoration = if (block.isCompleted) TextDecoration.LineThrough else null,
-                        color = if (block.isCompleted) cardText.copy(alpha = 0.5f) else ZenithColors.TextHeading
+                        color = if (block.isCompleted) cardText.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurface
                     ),
                     fontWeight = FontWeight.Bold
                 )
@@ -1573,15 +1829,23 @@ private fun ScheduleBlockItemCard(
                 }
             }
 
-            // Rollover Arrow & Completion Checkbox
+            // Edit, Rollover, and Checkbox Actions
             Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onEditBlock, modifier = Modifier.size(32.dp)) {
+                    Icon(
+                        imageVector = Icons.Outlined.Edit,
+                        contentDescription = "Edit Block",
+                        tint = cardText,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
                 if (!isTomorrowView) {
-                    IconButton(onClick = onRollOverTomorrow, modifier = Modifier.size(34.dp)) {
+                    IconButton(onClick = onRollOverTomorrow, modifier = Modifier.size(32.dp)) {
                         Icon(
                             imageVector = Icons.Outlined.ArrowForward,
                             contentDescription = "Rollover to tomorrow",
                             tint = cardText,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(16.dp)
                         )
                     }
                 }
@@ -1589,7 +1853,7 @@ private fun ScheduleBlockItemCard(
                     checked = block.isCompleted,
                     onCheckedChange = { onToggle() },
                     colors = CheckboxDefaults.colors(
-                        checkedColor = ZenithColors.ForestGreenPrimary,
+                        checkedColor = MaterialTheme.colorScheme.primary,
                         uncheckedColor = cardText.copy(alpha = 0.6f)
                     )
                 )
@@ -1605,8 +1869,8 @@ private fun EmptyBlueprintPrompt(
 ) {
     Card(
         shape = RoundedCornerShape(22.dp),
-        colors = CardDefaults.cardColors(containerColor = ZenithColors.BotanicalSurface),
-        border = BorderStroke(1.dp, ZenithColors.BotanicalBorder),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
@@ -1617,27 +1881,27 @@ private fun EmptyBlueprintPrompt(
             Icon(
                 imageVector = Icons.Outlined.EventNote,
                 contentDescription = null,
-                tint = ZenithColors.TextMuted,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(36.dp)
             )
             Text(
                 text = if (isTomorrow) "No blocks planned for tomorrow yet" else "No time blocks active today",
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Bold,
-                color = ZenithColors.TextHeading
+                color = MaterialTheme.colorScheme.onSurface
             )
             Text(
                 text = "Lock in your schedule blocks now to prevent drift.",
                 style = MaterialTheme.typography.bodySmall,
-                color = ZenithColors.TextMuted,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
             )
             Button(
                 onClick = onOpenSheet,
                 shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = ZenithColors.ForestGreenPrimary)
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
             ) {
-                Text("+ PLAN TIME BLOCKS", style = MaterialTheme.typography.labelSmall, color = Color.White)
+                Text("+ PLAN TIME BLOCKS", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onPrimary)
             }
         }
     }

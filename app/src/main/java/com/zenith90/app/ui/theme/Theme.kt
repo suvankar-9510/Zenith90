@@ -54,7 +54,7 @@ private val DarkZenithScheme = darkColorScheme(
 @Composable
 fun Zenith90Theme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = false, // Set to false by default so our custom botanical theme renders with full fidelity!
+    dynamicColor: Boolean = true, // Material You dynamic Monet theming on Android 12+ (Pixel devices)
     content: @Composable () -> Unit
 ) {
     val context = LocalContext.current

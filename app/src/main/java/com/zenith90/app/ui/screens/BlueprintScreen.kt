@@ -21,9 +21,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -33,7 +31,6 @@ import androidx.compose.ui.unit.sp
 import com.zenith90.app.data.local.BlockCategory
 import com.zenith90.app.data.local.ScheduleBlockEntity
 import com.zenith90.app.data.local.TaskPriority
-import com.zenith90.app.ui.components.HapticTimeSlider
 import com.zenith90.app.ui.theme.PixelHaptics
 import com.zenith90.app.ui.theme.ZenithColors
 import com.zenith90.app.ui.viewmodel.ZenithUiState
@@ -48,11 +45,12 @@ fun BlueprintScreen(
     onToggleBlockCompletion: (ScheduleBlockEntity) -> Unit,
     onRescheduleBlockTomorrow: (ScheduleBlockEntity) -> Unit,
     onDeleteScheduleBlock: (ScheduleBlockEntity) -> Unit,
-    onSaveBlock: (targetEpochDay: Long, startTimeMinutes: Int, durationMinutes: Int, title: String, tag: String, category: BlockCategory, priority: TaskPriority) -> Unit
+    onSaveBlock: (id: Long, targetEpochDay: Long, startTimeMinutes: Int, durationMinutes: Int, title: String, tag: String, category: BlockCategory, priority: TaskPriority) -> Unit
 ) {
     val view = LocalView.current
-    var selectedDateOffset by remember { mutableIntStateOf(0) } // 0 = Today, 1 = Tomorrow, 2 = Day after...
+    var selectedDateOffset by remember { mutableIntStateOf(0) } // 0 = Today, 1 = Tomorrow
     var showCreateDialog by remember { mutableStateOf(false) }
+    var editingBlock by remember { mutableStateOf<ScheduleBlockEntity?>(null) }
 
     val todayDate = LocalDate.now()
     val selectedDate = todayDate.plusDays(selectedDateOffset.toLong())
@@ -64,7 +62,6 @@ fun BlueprintScreen(
     val todayBlocks = state.currentDaySnapshot?.scheduleBlocks?.sortedBy { it.startTimeMinutes } ?: emptyList()
     val tomorrowBlocks = state.tomorrowSnapshot?.scheduleBlocks?.sortedBy { it.startTimeMinutes } ?: emptyList()
 
-    // Determine blocks for currently selected date
     val activeBlocks = when (selectedDateOffset) {
         0 -> todayBlocks
         1 -> tomorrowBlocks
@@ -72,20 +69,17 @@ fun BlueprintScreen(
     }
 
     val totalMinutes = activeBlocks.sumOf { it.durationMinutes }
-    val completedCount = activeBlocks.count { it.isCompleted }
-
-    // 7-day strip centered on today
     val weekDays = (-2..4).map { todayDate.plusDays(it.toLong()) }
 
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .background(ZenithColors.BotanicalBg)
+            .background(MaterialTheme.colorScheme.background)
             .padding(horizontal = 20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
         contentPadding = PaddingValues(top = 20.dp, bottom = 100.dp)
     ) {
-        // --- 1. TOP BAR (MONTH PILL DROPDOWN & BACK BUTTON) ---
+        // --- 1. TOP BAR (MONTH PILL DROPDOWN & DAY NAVIGATION) ---
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -94,8 +88,8 @@ fun BlueprintScreen(
             ) {
                 Surface(
                     shape = CircleShape,
-                    color = ZenithColors.BotanicalSurface,
-                    border = BorderStroke(1.dp, ZenithColors.BotanicalBorder),
+                    color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)),
                     modifier = Modifier
                         .size(44.dp)
                         .clickable {
@@ -107,7 +101,7 @@ fun BlueprintScreen(
                         Icon(
                             imageVector = Icons.Outlined.ChevronLeft,
                             contentDescription = "Previous Day",
-                            tint = ZenithColors.TextHeading,
+                            tint = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.size(24.dp)
                         )
                     }
@@ -116,8 +110,8 @@ fun BlueprintScreen(
                 // Month Pill
                 Surface(
                     shape = RoundedCornerShape(20.dp),
-                    color = ZenithColors.BotanicalSurface,
-                    border = BorderStroke(1.dp, ZenithColors.BotanicalBorder)
+                    color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
@@ -128,12 +122,12 @@ fun BlueprintScreen(
                             text = monthTitle,
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
-                            color = ZenithColors.TextHeading
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                         Icon(
                             imageVector = Icons.Outlined.CalendarMonth,
                             contentDescription = null,
-                            tint = ZenithColors.ForestGreenPrimary,
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(16.dp)
                         )
                     }
@@ -141,25 +135,25 @@ fun BlueprintScreen(
             }
         }
 
-        // --- 2. BOLD HEADLINE (Matches Right Screen: "Your Daily Planner, Calendar.") ---
+        // --- 2. BOLD HEADLINE ---
         item {
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
                     text = "Your Daily",
                     style = MaterialTheme.typography.headlineLarge,
                     fontWeight = FontWeight.Normal,
-                    color = ZenithColors.TextHeading
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
                     text = "Planner, Calendar.",
                     style = MaterialTheme.typography.headlineLarge,
                     fontWeight = FontWeight.ExtraBold,
-                    color = ZenithColors.TextHeading
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
         }
 
-        // --- 3. HORIZONTAL DATE STRIP (Matches Right Screen) ---
+        // --- 3. HORIZONTAL DATE STRIP ---
         item {
             LazyRow(
                 modifier = Modifier.fillMaxWidth(),
@@ -178,11 +172,11 @@ fun BlueprintScreen(
                             .clip(RoundedCornerShape(22.dp))
                             .clickable {
                                 PixelHaptics.crispTick(view)
-                                selectedDateOffset = offset.coerceIn(0, 1) // 0=Today, 1=Tomorrow
+                                selectedDateOffset = offset.coerceIn(0, 1)
                             },
                         shape = RoundedCornerShape(22.dp),
-                        color = if (isSelected) ZenithColors.ForestGreenPrimary else ZenithColors.BotanicalSurface,
-                        border = if (isSelected) null else BorderStroke(1.dp, ZenithColors.BotanicalBorder)
+                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+                        border = if (isSelected) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
                     ) {
                         Column(
                             modifier = Modifier.fillMaxSize().padding(vertical = 10.dp),
@@ -193,14 +187,14 @@ fun BlueprintScreen(
                                 text = dayName,
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Medium,
-                                color = if (isSelected) Color.White.copy(alpha = 0.8f) else ZenithColors.TextMuted,
+                                color = if (isSelected) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.85f) else MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontSize = 11.sp
                             )
                             Text(
                                 text = dayNum,
                                 style = MaterialTheme.typography.bodyLarge,
                                 fontWeight = FontWeight.Bold,
-                                color = if (isSelected) Color.White else ZenithColors.TextHeading
+                                color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
                             )
                         }
                     }
@@ -208,7 +202,7 @@ fun BlueprintScreen(
             }
         }
 
-        // --- 4. SECTION HEADER (Day Name + Task Count Pill) ---
+        // --- 4. SECTION HEADER ---
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -219,24 +213,24 @@ fun BlueprintScreen(
                     text = selectedDate.dayOfWeek.getDisplayName(TextStyle.FULL, Locale.ENGLISH),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = ZenithColors.TextHeading
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
                     text = "${activeBlocks.size} Tasks (${totalMinutes}m)",
                     style = MaterialTheme.typography.bodySmall,
-                    color = ZenithColors.TextMuted,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontWeight = FontWeight.Medium
                 )
             }
         }
 
-        // --- 5. VERTICAL TIMELINE WITH PASTEL TASK CARDS (Matches Right Screen) ---
+        // --- 5. VERTICAL TIMELINE WITH PASTEL TASK CARDS ---
         if (activeBlocks.isEmpty()) {
             item {
                 Card(
                     shape = RoundedCornerShape(24.dp),
-                    colors = CardDefaults.cardColors(containerColor = ZenithColors.BotanicalSurface),
-                    border = BorderStroke(1.dp, ZenithColors.BotanicalBorder),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(
@@ -247,19 +241,19 @@ fun BlueprintScreen(
                         Icon(
                             imageVector = Icons.Outlined.EventAvailable,
                             contentDescription = null,
-                            tint = ZenithColors.MintAccent,
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(40.dp)
                         )
                         Text(
                             text = "No Schedule Blocks Locked In",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = ZenithColors.TextHeading
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
                             text = "Structure your day in advance to preserve deep cognitive focus.",
                             style = MaterialTheme.typography.bodySmall,
-                            color = ZenithColors.TextMuted,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center
                         )
                         Button(
@@ -268,11 +262,11 @@ fun BlueprintScreen(
                                 showCreateDialog = true
                             },
                             shape = RoundedCornerShape(14.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = ZenithColors.ForestGreenPrimary)
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                         ) {
-                            Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color.White)
+                            Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onPrimary)
                             Spacer(Modifier.width(6.dp))
-                            Text("ADD TIME BLOCK", style = MaterialTheme.typography.labelSmall, color = Color.White)
+                            Text("ADD TIME BLOCK", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onPrimary)
                         }
                     }
                 }
@@ -289,6 +283,10 @@ fun BlueprintScreen(
                     onRolloverTomorrow = {
                         PixelHaptics.crispTick(view)
                         onRescheduleBlockTomorrow(block)
+                    },
+                    onEditBlock = {
+                        PixelHaptics.crispTick(view)
+                        editingBlock = block
                     },
                     onDeleteBlock = {
                         PixelHaptics.crispTick(view)
@@ -309,24 +307,44 @@ fun BlueprintScreen(
                     .fillMaxWidth()
                     .height(52.dp),
                 shape = RoundedCornerShape(16.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = ZenithColors.ForestGreenPrimary)
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
             ) {
-                Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(18.dp), tint = Color.White)
+                Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onPrimary)
                 Spacer(Modifier.width(8.dp))
-                Text("ADD NEW TIME BLOCK", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Color.White)
+                Text("ADD NEW TIME BLOCK", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary)
             }
         }
     }
 
-    // --- CREATE BLOCK DIALOG ---
+    // --- CREATE OR EDIT BLOCK COMPACT DIALOG ---
     if (showCreateDialog) {
-        CreateBlockHapticDialog(
+        CompactBlockEditorDialog(
+            initialBlock = null,
             defaultEpochDay = selectedEpochDay,
             onDismiss = { showCreateDialog = false },
-            onConfirm = { targetEpochDay, startTimeMinutes, durationMinutes, title, tag, category, priority ->
+            onConfirm = { id, targetEpochDay, startTimeMinutes, durationMinutes, title, tag, category, priority ->
                 PixelHaptics.confirmCheck(view)
-                onSaveBlock(targetEpochDay, startTimeMinutes, durationMinutes, title, tag, category, priority)
+                onSaveBlock(id, targetEpochDay, startTimeMinutes, durationMinutes, title, tag, category, priority)
                 showCreateDialog = false
+            }
+        )
+    }
+
+    if (editingBlock != null) {
+        val block = editingBlock!!
+        CompactBlockEditorDialog(
+            initialBlock = block,
+            defaultEpochDay = block.dateEpochDay,
+            onDismiss = { editingBlock = null },
+            onConfirm = { id, targetEpochDay, startTimeMinutes, durationMinutes, title, tag, category, priority ->
+                PixelHaptics.confirmCheck(view)
+                onSaveBlock(id, targetEpochDay, startTimeMinutes, durationMinutes, title, tag, category, priority)
+                editingBlock = null
+            },
+            onDelete = {
+                PixelHaptics.crispTick(view)
+                onDeleteScheduleBlock(block)
+                editingBlock = null
             }
         )
     }
@@ -338,16 +356,12 @@ private fun PastelTimelineCard(
     isTomorrow: Boolean,
     onToggleCompletion: () -> Unit,
     onRolloverTomorrow: () -> Unit,
+    onEditBlock: () -> Unit,
     onDeleteBlock: () -> Unit
 ) {
     val startTimeStr = formatMinutesToTime(block.startTimeMinutes)
     val endTimeStr = formatMinutesToTime(block.startTimeMinutes + block.durationMinutes)
 
-    // Match the pastel colors from the user's reference UI right screen:
-    // Card 1: Soft Pink / Rose (#FFE8EC)
-    // Card 2: Soft Butter Yellow (#FEF6D8)
-    // Card 3: Soft Neutral Grey (#F4F4F4)
-    // Card 4: Soft Sky Cyan (#DDF4FA)
     val (cardBg, cardText, cardAccent) = when (block.category) {
         BlockCategory.STUDY -> if (block.priority == TaskPriority.HIGH) {
             Triple(ZenithColors.PastelRose, ZenithColors.PastelRoseText, ZenithColors.PastelRoseAccent)
@@ -364,7 +378,7 @@ private fun PastelTimelineCard(
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalAlignment = Alignment.Top
     ) {
-        // Left Column: Time Marker (e.g. 08:00 AM)
+        // Left Column: Time Marker
         Column(
             modifier = Modifier.width(64.dp),
             verticalArrangement = Arrangement.spacedBy(2.dp)
@@ -373,13 +387,13 @@ private fun PastelTimelineCard(
                 text = startTimeStr.substringBefore(" "),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.ExtraBold,
-                color = ZenithColors.TextHeading
+                color = MaterialTheme.colorScheme.onSurface
             )
             Text(
                 text = startTimeStr.substringAfter(" "),
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Medium,
-                color = ZenithColors.TextMuted
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
 
@@ -392,7 +406,7 @@ private fun PastelTimelineCard(
             Row(
                 modifier = Modifier.padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(14.dp)
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 // Category Avatar Circle
                 Box(
@@ -416,14 +430,16 @@ private fun PastelTimelineCard(
                 }
 
                 Column(
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable { onEditBlock() },
                     verticalArrangement = Arrangement.spacedBy(3.dp)
                 ) {
                     Text(
                         text = block.title,
                         style = MaterialTheme.typography.bodyMedium.copy(
                             textDecoration = if (block.isCompleted) TextDecoration.LineThrough else null,
-                            color = if (block.isCompleted) cardText.copy(alpha = 0.5f) else ZenithColors.TextHeading
+                            color = if (block.isCompleted) cardText.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurface
                         ),
                         fontWeight = FontWeight.Bold
                     )
@@ -435,8 +451,16 @@ private fun PastelTimelineCard(
                     )
                 }
 
-                // Rollover & Checkbox
+                // Edit, Rollover & Checkbox Actions
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onEditBlock, modifier = Modifier.size(32.dp)) {
+                        Icon(
+                            imageVector = Icons.Outlined.Edit,
+                            contentDescription = "Edit Block",
+                            tint = cardText,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
                     if (!isTomorrow) {
                         IconButton(onClick = onRolloverTomorrow, modifier = Modifier.size(32.dp)) {
                             Icon(
@@ -451,7 +475,7 @@ private fun PastelTimelineCard(
                         checked = block.isCompleted,
                         onCheckedChange = { onToggleCompletion() },
                         colors = CheckboxDefaults.colors(
-                            checkedColor = ZenithColors.ForestGreenPrimary,
+                            checkedColor = MaterialTheme.colorScheme.primary,
                             uncheckedColor = cardText.copy(alpha = 0.6f)
                         )
                     )
@@ -461,41 +485,56 @@ private fun PastelTimelineCard(
     }
 }
 
+// --- STREAMLINED & COMPACT TIME BLOCK EDITOR DIALOG ---
 @Composable
-private fun CreateBlockHapticDialog(
+fun CompactBlockEditorDialog(
+    initialBlock: ScheduleBlockEntity? = null,
     defaultEpochDay: Long,
     onDismiss: () -> Unit,
-    onConfirm: (targetEpochDay: Long, startTimeMinutes: Int, durationMinutes: Int, title: String, tag: String, category: BlockCategory, priority: TaskPriority) -> Unit
+    onConfirm: (id: Long, targetEpochDay: Long, startTimeMinutes: Int, durationMinutes: Int, title: String, tag: String, category: BlockCategory, priority: TaskPriority) -> Unit,
+    onDelete: (() -> Unit)? = null
 ) {
-    var title by remember { mutableStateOf("") }
-    var tag by remember { mutableStateOf("Core") }
-    var category by remember { mutableStateOf(BlockCategory.STUDY) }
-    var priority by remember { mutableStateOf(TaskPriority.HIGH) }
-    var startTimeMinutes by remember { mutableFloatStateOf(360f) } // 06:00 AM default
-    var durationMinutes by remember { mutableFloatStateOf(90f) }   // 1.5 hours default
-    var targetDaySelection by remember { mutableIntStateOf(if (defaultEpochDay == LocalDate.now().toEpochDay()) 0 else 1) }
+    val isEditing = initialBlock != null
+    var title by remember { mutableStateOf(initialBlock?.title ?: "") }
+    var tag by remember { mutableStateOf(initialBlock?.examSubjectTag ?: "Core") }
+    var category by remember { mutableStateOf(initialBlock?.category ?: BlockCategory.STUDY) }
+    var priority by remember { mutableStateOf(initialBlock?.priority ?: TaskPriority.HIGH) }
+    var startTimeMinutes by remember { mutableIntStateOf(initialBlock?.startTimeMinutes ?: 360) }
+    var durationMinutes by remember { mutableIntStateOf(initialBlock?.durationMinutes ?: 90) }
+    var targetDaySelection by remember {
+        mutableIntStateOf(if (defaultEpochDay == LocalDate.now().toEpochDay()) 0 else 1)
+    }
 
     val todayEpoch = LocalDate.now().toEpochDay()
     val tomorrowEpoch = todayEpoch + 1
     val chosenEpoch = if (targetDaySelection == 0) todayEpoch else tomorrowEpoch
 
+    val quickPresets = listOf(
+        Pair("06:00 AM", 360),
+        Pair("08:30 AM", 510),
+        Pair("10:00 AM", 600),
+        Pair("02:00 PM", 840),
+        Pair("05:00 PM", 1020),
+        Pair("08:00 PM", 1200)
+    )
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                text = "ARCHITECT TIME BLOCK",
+                text = if (isEditing) "EDIT TIME BLOCK" else "NEW TIME BLOCK",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
         },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 // Day Target Selector
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
-                        .background(ZenithColors.BotanicalBg)
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
                         .padding(3.dp),
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
@@ -504,14 +543,14 @@ private fun CreateBlockHapticDialog(
                             .weight(1f)
                             .clip(RoundedCornerShape(10.dp))
                             .clickable { targetDaySelection = 0 },
-                        color = if (targetDaySelection == 0) ZenithColors.ForestGreenPrimary else Color.Transparent
+                        color = if (targetDaySelection == 0) MaterialTheme.colorScheme.primary else Color.Transparent
                     ) {
                         Text(
                             text = "TODAY",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
-                            color = if (targetDaySelection == 0) Color.White else ZenithColors.TextMuted,
-                            modifier = Modifier.padding(vertical = 8.dp),
+                            color = if (targetDaySelection == 0) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(vertical = 6.dp),
                             textAlign = TextAlign.Center
                         )
                     }
@@ -520,30 +559,31 @@ private fun CreateBlockHapticDialog(
                             .weight(1f)
                             .clip(RoundedCornerShape(10.dp))
                             .clickable { targetDaySelection = 1 },
-                        color = if (targetDaySelection == 1) ZenithColors.ForestGreenPrimary else Color.Transparent
+                        color = if (targetDaySelection == 1) MaterialTheme.colorScheme.primary else Color.Transparent
                     ) {
                         Text(
-                            text = "TOMORROW (NIGHT PLAN)",
+                            text = "TOMORROW",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
-                            color = if (targetDaySelection == 1) Color.White else ZenithColors.TextMuted,
-                            modifier = Modifier.padding(vertical = 8.dp),
+                            color = if (targetDaySelection == 1) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(vertical = 6.dp),
                             textAlign = TextAlign.Center
                         )
                     }
                 }
 
+                // Compact Title Input
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
-                    label = { Text("Task Description / Goal") },
-                    placeholder = { Text("e.g. Electrodynamics Chapter 4 Problems") },
+                    label = { Text("Task Goal / Objective") },
+                    placeholder = { Text("e.g. Electrodynamics Problems") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp)
                 )
 
-                // Category Chips
+                // Compact Category Chips
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -557,25 +597,92 @@ private fun CreateBlockHapticDialog(
                     }
                 }
 
-                HapticTimeSlider(
-                    value = startTimeMinutes,
-                    onValueChange = { startTimeMinutes = it },
-                    valueRange = 240f..1380f,
-                    stepMinutes = 15,
-                    title = "Start Time",
-                    formattedValue = formatMinutesToTime(startTimeMinutes.toInt()),
-                    icon = Icons.Outlined.Schedule
-                )
+                // Compact Start Time Selector
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Start: ${formatMinutesToTime(startTimeMinutes)}",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            FilledTonalButton(
+                                onClick = { startTimeMinutes = (startTimeMinutes - 15).coerceIn(0, 1425) },
+                                contentPadding = PaddingValues(horizontal = 6.dp),
+                                shape = RoundedCornerShape(6.dp),
+                                modifier = Modifier.height(28.dp)
+                            ) {
+                                Text("-15m", style = MaterialTheme.typography.labelSmall, fontSize = 10.sp)
+                            }
+                            FilledTonalButton(
+                                onClick = { startTimeMinutes = (startTimeMinutes + 15).coerceIn(0, 1425) },
+                                contentPadding = PaddingValues(horizontal = 6.dp),
+                                shape = RoundedCornerShape(6.dp),
+                                modifier = Modifier.height(28.dp)
+                            ) {
+                                Text("+15m", style = MaterialTheme.typography.labelSmall, fontSize = 10.sp)
+                            }
+                        }
+                    }
 
-                HapticTimeSlider(
-                    value = durationMinutes,
-                    onValueChange = { durationMinutes = it },
-                    valueRange = 15f..240f,
-                    stepMinutes = 15,
-                    title = "Block Duration",
-                    formattedValue = "${durationMinutes.toInt()} Minutes (${"%.1f".format(durationMinutes / 60f)} hrs)",
-                    icon = Icons.Outlined.Timer
-                )
+                    // Quick Time Chips Row
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        items(quickPresets) { preset ->
+                            SuggestionChip(
+                                onClick = { startTimeMinutes = preset.second },
+                                label = { Text(preset.first, style = MaterialTheme.typography.labelSmall, fontSize = 10.sp) }
+                            )
+                        }
+                    }
+                }
+
+                // Compact Duration Selector Chips
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Duration: ${durationMinutes}m (${"%.1f".format(durationMinutes / 60f)} hrs)",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            FilledTonalButton(
+                                onClick = { durationMinutes = (durationMinutes - 15).coerceAtLeast(15) },
+                                contentPadding = PaddingValues(horizontal = 6.dp),
+                                shape = RoundedCornerShape(6.dp),
+                                modifier = Modifier.height(28.dp)
+                            ) {
+                                Text("-15m", style = MaterialTheme.typography.labelSmall, fontSize = 10.sp)
+                            }
+                            FilledTonalButton(
+                                onClick = { durationMinutes = (durationMinutes + 15).coerceAtMost(360) },
+                                contentPadding = PaddingValues(horizontal = 6.dp),
+                                shape = RoundedCornerShape(6.dp),
+                                modifier = Modifier.height(28.dp)
+                            ) {
+                                Text("+15m", style = MaterialTheme.typography.labelSmall, fontSize = 10.sp)
+                            }
+                        }
+                    }
+
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        listOf(15, 30, 45, 60, 90, 120, 150).forEach { dur ->
+                            SuggestionChip(
+                                onClick = { durationMinutes = dur },
+                                label = { Text("${dur}m", style = MaterialTheme.typography.labelSmall, fontSize = 10.sp) }
+                            )
+                        }
+                    }
+                }
             }
         },
         confirmButton = {
@@ -583,9 +690,10 @@ private fun CreateBlockHapticDialog(
                 onClick = {
                     if (title.isNotBlank()) {
                         onConfirm(
+                            initialBlock?.id ?: 0L,
                             chosenEpoch,
-                            startTimeMinutes.toInt(),
-                            durationMinutes.toInt(),
+                            startTimeMinutes,
+                            durationMinutes,
                             title,
                             tag,
                             category,
@@ -594,14 +702,21 @@ private fun CreateBlockHapticDialog(
                     }
                 },
                 enabled = title.isNotBlank(),
-                colors = ButtonDefaults.buttonColors(containerColor = ZenithColors.ForestGreenPrimary)
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
             ) {
-                Text("LOCK IN BLOCK", style = MaterialTheme.typography.labelSmall, color = Color.White)
+                Text(if (isEditing) "SAVE CHANGES" else "LOCK IN BLOCK", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onPrimary)
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("CANCEL", style = MaterialTheme.typography.labelSmall)
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (isEditing && onDelete != null) {
+                    TextButton(onClick = onDelete) {
+                        Text("DELETE", style = MaterialTheme.typography.labelSmall, color = ZenithColors.PastelRoseText)
+                    }
+                }
+                TextButton(onClick = onDismiss) {
+                    Text("CANCEL", style = MaterialTheme.typography.labelSmall)
+                }
             }
         }
     )

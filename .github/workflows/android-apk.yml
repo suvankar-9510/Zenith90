@@ -49,38 +49,32 @@ jobs:
             echo "Found APK at $APK_PATH"
             cp "$APK_PATH" ./zenith90-debug.apk
             
-            # Publish to v1.6.0-pixel release
-            gh release delete v1.6.0-pixel --yes || true
-            gh release create v1.6.0-pixel ./zenith90-debug.apk \
-              --title "Zenith90 v1.6.0 Pixel (Botanical Timezy Redesign & Notifications)" \
-              --notes "### 🌿 Zenith90 v1.6.0 Instant Pixel APK
+            # Publish to v1.7.0-pixel release
+            gh release delete v1.7.0-pixel --yes || true
+            gh release create v1.7.0-pixel ./zenith90-debug.apk \
+              --title "Zenith90 v1.7.0 Pixel (Material You Monet, Circle Fill & Compact Editors)" \
+              --notes "### 🎨 Zenith90 v1.7.0 Instant Pixel APK
               
               Automated build compiled via GitHub Actions.
               
-              #### Comprehensive Updates in v1.6.0:
-              - **Modern Botanical Aesthetic (Timezy UI)**: Fresh, calming color system with Deep Forest Green (#14361F), soft sage background (#F3F7F3), pure white rounded cards (24.dp), and delicate borders.
-              - **Dashboard Center Screen Overhaul**:
-                - Top Bar: Elegant greeting (\"Good Morning/Evening\"), user display name, profile shortcut, and interactive notification bell.
-                - Create New Task Banner: Hero card with deep green circular calendar badge for instant planning.
-                - 2x2 Summary Grid: Clean tiles for Wake Anchor, Deep Study, Conditioning, and Equilibrium with pastel icon badges.
-                - Activity 7-Day Chart: Rounded vertical pill bars with today highlighted in solid forest green with indicator dot.
-              - **Blueprint Timeline Overhaul**:
-                - Horizontal date strip (Sun–Sat) with active day in deep forest green pill.
-                - Vertical timeline with soft pastel cards (Rose, Yellow, Mint, Sky, Lilac), category avatar badges, rollover arrows, and completion checkboxes.
-              - **Animations**:
-                - Breathing / pulsing focus circle on Pomodoro timer.
-                - Spring animations on activity chart bars and completion metrics.
-              - **System Notifications**:
-                - Android 13+ POST_NOTIFICATIONS runtime permissions.
-                - Focus completion alerts when Pomodoro finishes.
-                - Circadian wake and blueprint reminder channels.
-                - Test notification trigger via top-bar bell icon.
-              - **Haptic Tactile Engine**: Crisp ticks on sliders/dates, confirm vibrations, double timer pulse, and heavy milestone impact.
+              #### What's New in v1.7.0:
+              - **Material You Dynamic Theming**: Full Monet wallpaper synchronization enabled by default on Android 12+ (Pixel devices). All surfaces, text, buttons, and badges dynamically match your system color scheme.
+              - **Summary Circle Color Filling**: All 4 Summary tiles now feature dynamic circular color filling indicators with animated arcs and translucent disc fills reflecting actual progress for Wake Anchor, Deep Study, Conditioning, and Equilibrium.
+              - **Compact Blueprint Block Editor**: Streamlined block creation and editing dialog with compact time steppers, preset chips, and quick duration selectors.
+              - **Direct Blueprint Task Editing**: Added inline edit (pencil) buttons directly on every timeline card to update tasks without re-creating them.
+              - **Compact & Highly Editable Deep Study Engine**: Compact study card with inline edit dialog to directly adjust logged study minutes, customize daily study targets, and quick-add study sessions (+15m, +25m, +45m, +60m, or custom).
               
               #### Direct Download & Testing:
               1. Download **\`zenith90-debug.apk\`** on your Android device.
               2. Open file and confirm install (allow 'Install Unknown Apps' if prompted).
               3. Launch **Zenith90**!" \
+              --prerelease
+
+            # Also update v1.6.0-pixel for backwards compatibility
+            gh release delete v1.6.0-pixel --yes || true
+            gh release create v1.6.0-pixel ./zenith90-debug.apk \
+              --title "Zenith90 v1.7.0 Pixel (Material You Monet & Circle Fill)" \
+              --notes "Updated to Zenith90 v1.7.0 with Material You dynamic color, circular filling summary, compact blueprint editor, and editable study section." \
               --prerelease
 
             # Also update v1.5.0-pixel for backwards compatibility

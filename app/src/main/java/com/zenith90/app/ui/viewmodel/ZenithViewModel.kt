@@ -394,6 +394,24 @@ class ZenithViewModel(
         }
     }
 
+    fun updateLoggedStudyMinutes(exactMinutes: Int, newTargetMinutes: Int? = null) {
+        viewModelScope.launch {
+            val currentLog = uiState.value.currentDaySnapshot?.dailyLog
+                ?: DailyLogEntity(dateEpochDay = todayEpoch)
+            val targetMins = newTargetMinutes ?: currentLog.targetStudyMinutes
+            val updated = currentLog.copy(
+                totalStudyMinutes = exactMinutes.coerceAtLeast(0),
+                targetStudyMinutes = targetMins
+            )
+            dao.upsertDailyLog(recalculateDayCompletion(updated))
+            if (newTargetMinutes != null) {
+                dao.updateDailyTargets(todayEpoch, updated.targetWakeTimeMinutes, targetMins)
+            }
+            evaluateBadges()
+            _authMeta.value = Triple(null, false, "Study time adjusted to ${exactMinutes / 60}h ${exactMinutes % 60}m")
+        }
+    }
+
     // --- TIME-BLOCKED BLUEPRINT & SCHEDULE MANAGEMENT ---
     fun saveOrUpdateScheduleBlock(
         id: Long = 0,

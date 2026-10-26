@@ -126,8 +126,8 @@ class MainActivity : ComponentActivity() {
                         snackbarHost = { SnackbarHost(snackbarHostState) },
                         bottomBar = {
                             NavigationBar(
-                                containerColor = ZenithColors.BotanicalSurface,
-                                contentColor = ZenithColors.TextHeading
+                                containerColor = MaterialTheme.colorScheme.surface,
+                                contentColor = MaterialTheme.colorScheme.onSurface
                             ) {
                                 ZenithTab.entries.forEach { tab ->
                                     val isSelected = currentTab == tab
@@ -155,11 +155,11 @@ class MainActivity : ComponentActivity() {
                                             )
                                         },
                                         colors = NavigationBarItemDefaults.colors(
-                                            selectedIconColor = ZenithColors.ForestGreenPrimary,
-                                            selectedTextColor = ZenithColors.ForestGreenPrimary,
-                                            indicatorColor = ZenithColors.MintContainer,
-                                            unselectedIconColor = ZenithColors.TextMuted,
-                                            unselectedTextColor = ZenithColors.TextMuted
+                                            selectedIconColor = MaterialTheme.colorScheme.primary,
+                                            selectedTextColor = MaterialTheme.colorScheme.primary,
+                                            indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     )
                                 }
@@ -175,6 +175,7 @@ class MainActivity : ComponentActivity() {
                                     onConfirmPomodoro = viewModel::confirmPomodoroSession,
                                     onDiscardPomodoro = viewModel::discardPomodoroSession,
                                     onQuickAddStudyMinutes = viewModel::commitStudySessionMinutes,
+                                    onUpdateExactStudyMinutes = viewModel::updateLoggedStudyMinutes,
                                     onSwitchWorkoutModality = viewModel::switchWorkoutModality,
                                     onToggleWorkoutCompleted = viewModel::toggleWorkoutComplete,
                                     onAddWorkoutExercise = viewModel::addWorkoutExercise,
@@ -183,6 +184,18 @@ class MainActivity : ComponentActivity() {
                                     onToggleBlockCompletion = viewModel::toggleScheduleBlockCompletion,
                                     onRescheduleBlockTomorrow = viewModel::rollOverTaskToTomorrow,
                                     onDeleteScheduleBlock = viewModel::deleteScheduleBlock,
+                                    onSaveBlock = { id, epochDay, startMins, durMins, title, tag, cat, prio ->
+                                        viewModel.saveOrUpdateScheduleBlock(
+                                            id = id,
+                                            targetEpochDay = epochDay,
+                                            startTimeMinutes = startMins,
+                                            durationMinutes = durMins,
+                                            title = title,
+                                            examSubjectTag = tag,
+                                            category = cat,
+                                            priority = prio
+                                        )
+                                    },
                                     onOpenNightBlueprintSheet = { showBlueprintSheet = true },
                                     onUpdateUserSettings = viewModel::updateUserSettings,
                                     onUpdateTodayTargets = viewModel::updateTodayTargets,
@@ -214,8 +227,9 @@ class MainActivity : ComponentActivity() {
                                     onToggleBlockCompletion = viewModel::toggleScheduleBlockCompletion,
                                     onRescheduleBlockTomorrow = viewModel::rollOverTaskToTomorrow,
                                     onDeleteScheduleBlock = viewModel::deleteScheduleBlock,
-                                    onSaveBlock = { epochDay, startMins, durMins, title, tag, cat, prio ->
+                                    onSaveBlock = { id, epochDay, startMins, durMins, title, tag, cat, prio ->
                                         viewModel.saveOrUpdateScheduleBlock(
+                                            id = id,
                                             targetEpochDay = epochDay,
                                             startTimeMinutes = startMins,
                                             durationMinutes = durMins,
