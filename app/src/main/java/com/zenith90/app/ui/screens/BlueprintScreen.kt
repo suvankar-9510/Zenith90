@@ -675,7 +675,7 @@ fun CompactBlockEditorDialog(
                     }
 
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        listOf(15, 30, 45, 60, 90, 120, 150).forEach { dur ->
+                        items(listOf(15, 30, 45, 60, 90, 120, 150)) { dur ->
                             SuggestionChip(
                                 onClick = { durationMinutes = dur },
                                 label = { Text("${dur}m", style = MaterialTheme.typography.labelSmall, fontSize = 10.sp) }

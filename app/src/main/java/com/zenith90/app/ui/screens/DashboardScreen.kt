@@ -1253,9 +1253,10 @@ private fun ActivityWeeklyChartCard(
                                 .fillMaxWidth(),
                             contentAlignment = Alignment.BottomCenter
                         ) {
+                            val gridOutlineColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)
                             Canvas(modifier = Modifier.fillMaxHeight().width(2.dp)) {
                                 drawLine(
-                                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f),
+                                    color = gridOutlineColor,
                                     start = Offset(0f, 0f),
                                     end = Offset(0f, size.height),
                                     strokeWidth = 1.dp.toPx()
