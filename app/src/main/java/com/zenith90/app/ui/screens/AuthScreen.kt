@@ -294,7 +294,7 @@ fun AuthScreen(
                             keyboardType = KeyboardType.Email,
                             imeAction = ImeAction.Next
                         )
-                    }
+                    )
 
                     // Password Field
                     OutlinedTextField(
