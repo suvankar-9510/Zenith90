@@ -1,7 +1,11 @@
 package com.zenith90.app.ui.theme
 
 import android.app.Activity
+import android.content.Context
 import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.view.HapticFeedbackConstants
 import android.view.View
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -19,33 +23,38 @@ import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
 private val LightZenithScheme = lightColorScheme(
-    background = ZenithColors.AlabasterBg,
-    surface = ZenithColors.SoftSandSurface,
-    surfaceVariant = ZenithColors.SoftSandElevated,
-    onBackground = ZenithColors.DeepCharcoalText,
-    onSurface = ZenithColors.DeepCharcoalText,
-    onSurfaceVariant = ZenithColors.MutedSlateText,
-    primary = ZenithColors.WarmTaupeAccent,
+    background = ZenithColors.BotanicalBg,
+    surface = ZenithColors.BotanicalSurface,
+    surfaceVariant = ZenithColors.MintContainer,
+    onBackground = ZenithColors.TextHeading,
+    onSurface = ZenithColors.TextHeading,
+    onSurfaceVariant = ZenithColors.TextMuted,
+    primary = ZenithColors.ForestGreenPrimary,
     onPrimary = Color.White,
-    outline = ZenithColors.GlassStrokeLight
+    primaryContainer = ZenithColors.MintContainer,
+    onPrimaryContainer = ZenithColors.ForestGreenDark,
+    outline = ZenithColors.BotanicalBorder,
+    outlineVariant = ZenithColors.BotanicalDivider
 )
 
 private val DarkZenithScheme = darkColorScheme(
     background = ZenithColors.TrueObsidianBg,
     surface = ZenithColors.ElevatedMatteCard,
-    surfaceVariant = Color(0xFF23232A),
+    surfaceVariant = ZenithColors.DarkSurfaceVariant,
     onBackground = ZenithColors.OffWhiteText,
     onSurface = ZenithColors.OffWhiteText,
     onSurfaceVariant = ZenithColors.MutedStoneSecondary,
-    primary = ZenithColors.MutedSageAccent,
-    onPrimary = ZenithColors.TrueObsidianBg,
+    primary = ZenithColors.MintAccent,
+    onPrimary = ZenithColors.ForestGreenDark,
+    primaryContainer = ZenithColors.DarkSurfaceVariant,
+    onPrimaryContainer = ZenithColors.MintAccent,
     outline = ZenithColors.GlassStrokeDark
 )
 
 @Composable
 fun Zenith90Theme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = true,
+    dynamicColor: Boolean = false, // Set to false by default so our custom botanical theme renders with full fidelity!
     content: @Composable () -> Unit
 ) {
     val context = LocalContext.current
@@ -95,5 +104,64 @@ object PixelHaptics {
 
     fun heavyUnlock(view: View) {
         view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+    }
+
+    fun errorBuzz(view: View) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            view.performHapticFeedback(HapticFeedbackConstants.REJECT)
+        } else {
+            view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+        }
+    }
+
+    fun timerPulse(context: Context) {
+        try {
+            val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val vm = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
+                vm?.defaultVibrator
+            } else {
+                @Suppress("DEPRECATION")
+                context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+            }
+
+            if (vibrator != null && vibrator.hasVibrator()) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    val timings = longArrayOf(0, 45, 60, 45)
+                    val amplitudes = intArrayOf(0, 180, 0, 220)
+                    vibrator.vibrate(VibrationEffect.createWaveform(timings, amplitudes, -1))
+                } else {
+                    @Suppress("DEPRECATION")
+                    vibrator.vibrate(longArrayOf(0, 40, 50, 40), -1)
+                }
+            }
+        } catch (_: Exception) {
+            // Haptics fallback gracefully
+        }
+    }
+
+    fun milestoneImpact(view: View, context: Context) {
+        confirmCheck(view)
+        try {
+            val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val vm = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
+                vm?.defaultVibrator
+            } else {
+                @Suppress("DEPRECATION")
+                context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+            }
+
+            if (vibrator != null && vibrator.hasVibrator()) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    val timings = longArrayOf(0, 60, 40, 80, 40, 120)
+                    val amplitudes = intArrayOf(0, 120, 0, 180, 0, 255)
+                    vibrator.vibrate(VibrationEffect.createWaveform(timings, amplitudes, -1))
+                } else {
+                    @Suppress("DEPRECATION")
+                    vibrator.vibrate(180)
+                }
+            }
+        } catch (_: Exception) {
+            // Fallback
+        }
     }
 }

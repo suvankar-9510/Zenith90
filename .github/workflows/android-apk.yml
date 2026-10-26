@@ -49,25 +49,45 @@ jobs:
             echo "Found APK at $APK_PATH"
             cp "$APK_PATH" ./zenith90-debug.apk
             
-            # Publish to v1.5.0-pixel release
-            gh release delete v1.5.0-pixel --yes || true
-            gh release create v1.5.0-pixel ./zenith90-debug.apk \
-              --title "Zenith90 v1.5.0 Pixel (Material You & Gaming Vault)" \
-              --notes "### ⚡ Zenith90 v1.5.0 Instant Pixel APK
+            # Publish to v1.6.0-pixel release
+            gh release delete v1.6.0-pixel --yes || true
+            gh release create v1.6.0-pixel ./zenith90-debug.apk \
+              --title "Zenith90 v1.6.0 Pixel (Botanical Timezy Redesign & Notifications)" \
+              --notes "### 🌿 Zenith90 v1.6.0 Instant Pixel APK
               
               Automated build compiled via GitHub Actions.
               
-              #### Comprehensive Updates:
-              - **Material You Dynamic Theming**: Wallpaper Monet sync on Android 12+ (Pixel devices) with expressive typography headers.
-              - **Haptic Dial Sliders**: Smooth sliders with tactile haptic ticks for target wake-up times, study hours, and blueprint schedules.
-              - **Pillar II Boost Verification**: Verification dialog for +25M / +50M study boosts prevents accidental credit and ensures streak integrity.
-              - **Dedicated Blueprint Page**: Dedicated tab for Today & Tomorrow time blocks, execution statistics, and quick presets.
-              - **PUBG & Free Fire Gaming Badges**: Battle Royale rank tiers (Bronze, Silver, Gold, Platinum, Diamond, Heroic, Mythic) with dark grey locked state and vibrant neon glow for claimed ranks, plus instant claim actions.
+              #### Comprehensive Updates in v1.6.0:
+              - **Modern Botanical Aesthetic (Timezy UI)**: Fresh, calming color system with Deep Forest Green (#14361F), soft sage background (#F3F7F3), pure white rounded cards (24.dp), and delicate borders.
+              - **Dashboard Center Screen Overhaul**:
+                - Top Bar: Elegant greeting (\"Good Morning/Evening\"), user display name, profile shortcut, and interactive notification bell.
+                - Create New Task Banner: Hero card with deep green circular calendar badge for instant planning.
+                - 2x2 Summary Grid: Clean tiles for Wake Anchor, Deep Study, Conditioning, and Equilibrium with pastel icon badges.
+                - Activity 7-Day Chart: Rounded vertical pill bars with today highlighted in solid forest green with indicator dot.
+              - **Blueprint Timeline Overhaul**:
+                - Horizontal date strip (Sun–Sat) with active day in deep forest green pill.
+                - Vertical timeline with soft pastel cards (Rose, Yellow, Mint, Sky, Lilac), category avatar badges, rollover arrows, and completion checkboxes.
+              - **Animations**:
+                - Breathing / pulsing focus circle on Pomodoro timer.
+                - Spring animations on activity chart bars and completion metrics.
+              - **System Notifications**:
+                - Android 13+ POST_NOTIFICATIONS runtime permissions.
+                - Focus completion alerts when Pomodoro finishes.
+                - Circadian wake and blueprint reminder channels.
+                - Test notification trigger via top-bar bell icon.
+              - **Haptic Tactile Engine**: Crisp ticks on sliders/dates, confirm vibrations, double timer pulse, and heavy milestone impact.
               
               #### Direct Download & Testing:
               1. Download **\`zenith90-debug.apk\`** on your Android device.
               2. Open file and confirm install (allow 'Install Unknown Apps' if prompted).
               3. Launch **Zenith90**!" \
+              --prerelease
+
+            # Also update v1.5.0-pixel for backwards compatibility
+            gh release delete v1.5.0-pixel --yes || true
+            gh release create v1.5.0-pixel ./zenith90-debug.apk \
+              --title "Zenith90 v1.6.0 Pixel (Botanical Timezy Redesign)" \
+              --notes "Updated to Zenith90 v1.6.0 with Botanical Timezy redesign, animations, haptics, and notifications." \
               --prerelease
 
             # Also update v1.4.0-pixel for backwards compatibility

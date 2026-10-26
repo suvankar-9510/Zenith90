@@ -5,22 +5,61 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 
 object ZenithColors {
-    // Light Mode (Warm Alabaster & Soft Sand)
-    val AlabasterBg = Color(0xFFF8F7F4)
-    val SoftSandSurface = Color(0xFFEFECE6)
-    val SoftSandElevated = Color(0xFFE6E1D8)
-    val DeepCharcoalText = Color(0xFF1C1B1F)
-    val MutedSlateText = Color(0xFF605D66)
-    val WarmTaupeAccent = Color(0xFF8C7A6B)
+    // --- BOTANICAL "TIMEZY" PALETTE (Light Mode) ---
+    val ForestGreenPrimary = Color(0xFF14361F)
+    val ForestGreenDark = Color(0xFF0C2414)
+    val ForestGreenMedium = Color(0xFF265835)
+    val MintAccent = Color(0xFF52B788)
+    val MintContainer = Color(0xFFE2F4E7)
 
-    // Dark Mode (OLED Pixel True Obsidian & Matte Grey)
-    val TrueObsidianBg = Color(0xFF0F0F12)
-    val ElevatedMatteCard = Color(0xFF1A1A1F)
-    val GlassStrokeDark = Color(0xFF282830)
-    val GlassStrokeLight = Color(0xFFDCD7CC)
-    val OffWhiteText = Color(0xFFE6E1E5)
-    val MutedStoneSecondary = Color(0xFF938F99)
-    val MutedSageAccent = Color(0xFFA39B8B)
+    val BotanicalBg = Color(0xFFF3F7F3)
+    val BotanicalSurface = Color(0xFFFFFFFF)
+    val BotanicalSurfaceElevated = Color(0xFFF8FAF8)
+    val BotanicalBorder = Color(0xFFE3EDE3)
+    val BotanicalDivider = Color(0xFFE8EFE8)
+
+    val TextHeading = Color(0xFF142417)
+    val TextBody = Color(0xFF334638)
+    val TextMuted = Color(0xFF75887B)
+
+    // Legacy Fallbacks
+    val AlabasterBg = BotanicalBg
+    val SoftSandSurface = BotanicalSurface
+    val SoftSandElevated = BotanicalSurfaceElevated
+    val DeepCharcoalText = TextHeading
+    val MutedSlateText = TextMuted
+    val WarmTaupeAccent = ForestGreenPrimary
+
+    // --- DARK MODE (Deep Obsidian Forest & Emerald) ---
+    val TrueObsidianBg = Color(0xFF0B140E)
+    val ElevatedMatteCard = Color(0xFF132017)
+    val DarkSurfaceVariant = Color(0xFF1B2D21)
+    val GlassStrokeDark = Color(0xFF263D2E)
+    val GlassStrokeLight = BotanicalBorder
+    val OffWhiteText = Color(0xFFE8F1E9)
+    val MutedStoneSecondary = Color(0xFF8BA291)
+    val MutedSageAccent = MintAccent
+
+    // --- PASTEL TASK & TIME-BLOCK PALETTE (from Reference UI) ---
+    val PastelRose = Color(0xFFFFE8EC)
+    val PastelRoseText = Color(0xFFB83E55)
+    val PastelRoseAccent = Color(0xFFF87171)
+
+    val PastelAmber = Color(0xFFFEF6D8)
+    val PastelAmberText = Color(0xFF9E7C1B)
+    val PastelAmberAccent = Color(0xFFFBBF24)
+
+    val PastelMint = Color(0xFFE2F4E7)
+    val PastelMintText = Color(0xFF1E653C)
+    val PastelMintAccent = Color(0xFF34D399)
+
+    val PastelSky = Color(0xFFDDF4FA)
+    val PastelSkyText = Color(0xFF167E96)
+    val PastelSkyAccent = Color(0xFF38BDF8)
+
+    val PastelLilac = Color(0xFFF1EBFB)
+    val PastelLilacText = Color(0xFF6C4BA2)
+    val PastelLilacAccent = Color(0xFFA78BFA)
 
     // Data Visualization Gradient Stops
     val AmberStart = Color(0xFFF6D365)
@@ -53,15 +92,23 @@ object ZenithColors {
         end = Offset(Float.POSITIVE_INFINITY, 0f)
     )
 
+    val ForestGradient = Brush.linearGradient(
+        colors = listOf(ForestGreenPrimary, ForestGreenMedium)
+    )
+
+    val MintGradient = Brush.linearGradient(
+        colors = listOf(MintAccent, Color(0xFF2E8B57))
+    )
+
     val StudyCompletionGradient = Brush.linearGradient(
-        colors = listOf(SageStart, TealEnd),
+        colors = listOf(MintAccent, TealEnd),
         start = Offset(0f, 0f),
         end = Offset(Float.POSITIVE_INFINITY, 0f)
     )
 
     fun studyVerticalAreaBrush(alpha: Float = 0.35f) = Brush.verticalGradient(
         colors = listOf(
-            SageStart.copy(alpha = alpha),
+            MintAccent.copy(alpha = alpha),
             TealEnd.copy(alpha = alpha * 0.4f),
             Color.Transparent
         )

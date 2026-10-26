@@ -1,9 +1,13 @@
 package com.zenith90.app
 
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -15,15 +19,19 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.zenith90.app.data.local.ZenithDatabase
 import com.zenith90.app.data.remote.FirebaseAuthManager
+import com.zenith90.app.notifications.ZenithNotificationManager
 import com.zenith90.app.ui.screens.*
 import com.zenith90.app.ui.theme.PixelHaptics
+import com.zenith90.app.ui.theme.ZenithColors
 import com.zenith90.app.ui.theme.Zenith90Theme
 import com.zenith90.app.ui.viewmodel.ZenithViewModel
+import kotlinx.coroutines.launch
 
 enum class ZenithTab(val label: String) {
     DASHBOARD("COMMAND"),
@@ -36,6 +44,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        // Initialize Notification Channels
+        ZenithNotificationManager.initChannels(applicationContext)
 
         val database = ZenithDatabase.getDatabase(applicationContext)
         val authManager = FirebaseAuthManager(applicationContext)
@@ -51,10 +62,47 @@ class MainActivity : ComponentActivity() {
             Zenith90Theme {
                 val viewModel: ZenithViewModel = viewModel(factory = factory)
                 val state by viewModel.uiState.collectAsState()
+                val coroutineScope = rememberCoroutineScope()
                 var currentTab by remember { mutableStateOf(ZenithTab.DASHBOARD) }
                 var showBlueprintSheet by remember { mutableStateOf(false) }
                 val snackbarHostState = remember { SnackbarHostState() }
                 val view = LocalView.current
+
+                // Android 13+ Notification Permission Request Launcher
+                val notificationPermissionLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.RequestPermission()
+                ) { isGranted ->
+                    if (isGranted) {
+                        ZenithNotificationManager.sendTestNotification(applicationContext)
+                        coroutineScope.launch {
+                            snackbarHostState.showSnackbar("🔔 Notifications enabled! Test notification dispatched.")
+                        }
+                    }
+                }
+
+                // Request notification permission once at startup on Android 13+
+                LaunchedEffect(Unit) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        val hasPerm = ContextCompat.checkSelfPermission(
+                            applicationContext,
+                            android.Manifest.permission.POST_NOTIFICATIONS
+                        ) == PackageManager.PERMISSION_GRANTED
+                        if (!hasPerm) {
+                            notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                        }
+                    }
+                }
+
+                // Dispatch system notification when Pomodoro session concludes!
+                LaunchedEffect(state.pendingPomodoroMinutes) {
+                    state.pendingPomodoroMinutes?.let { minutes ->
+                        ZenithNotificationManager.sendFocusCompleteNotification(
+                            context = applicationContext,
+                            elapsedMinutes = minutes,
+                            subject = state.userSettings.examTitle
+                        )
+                    }
+                }
 
                 LaunchedEffect(state.syncToastMessage) {
                     state.syncToastMessage?.let { msg ->
@@ -77,10 +125,14 @@ class MainActivity : ComponentActivity() {
                     Scaffold(
                         snackbarHost = { SnackbarHost(snackbarHostState) },
                         bottomBar = {
-                            NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
+                            NavigationBar(
+                                containerColor = ZenithColors.BotanicalSurface,
+                                contentColor = ZenithColors.TextHeading
+                            ) {
                                 ZenithTab.entries.forEach { tab ->
+                                    val isSelected = currentTab == tab
                                     NavigationBarItem(
-                                        selected = currentTab == tab,
+                                        selected = isSelected,
                                         onClick = {
                                             PixelHaptics.crispTick(view)
                                             currentTab = tab
@@ -97,8 +149,18 @@ class MainActivity : ComponentActivity() {
                                             )
                                         },
                                         label = {
-                                            Text(tab.label, style = MaterialTheme.typography.labelSmall)
-                                        }
+                                            Text(
+                                                text = tab.label,
+                                                style = MaterialTheme.typography.labelSmall
+                                            )
+                                        },
+                                        colors = NavigationBarItemDefaults.colors(
+                                            selectedIconColor = ZenithColors.ForestGreenPrimary,
+                                            selectedTextColor = ZenithColors.ForestGreenPrimary,
+                                            indicatorColor = ZenithColors.MintContainer,
+                                            unselectedIconColor = ZenithColors.TextMuted,
+                                            unselectedTextColor = ZenithColors.TextMuted
+                                        )
                                     )
                                 }
                             }
@@ -126,7 +188,26 @@ class MainActivity : ComponentActivity() {
                                     onUpdateTodayTargets = viewModel::updateTodayTargets,
                                     onTriggerCloudSync = viewModel::triggerCloudSync,
                                     onSignOut = viewModel::signOut,
-                                    onNavigateToBlueprint = { currentTab = ZenithTab.BLUEPRINT }
+                                    onNavigateToBlueprint = { currentTab = ZenithTab.BLUEPRINT },
+                                    onSendTestNotification = {
+                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                                            ContextCompat.checkSelfPermission(
+                                                applicationContext,
+                                                android.Manifest.permission.POST_NOTIFICATIONS
+                                            ) != PackageManager.PERMISSION_GRANTED
+                                        ) {
+                                            notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                                        } else {
+                                            val sent = ZenithNotificationManager.sendTestNotification(applicationContext)
+                                            coroutineScope.launch {
+                                                if (sent) {
+                                                    snackbarHostState.showSnackbar("🔔 Notification sent! Check your notification shade.")
+                                                } else {
+                                                    snackbarHostState.showSnackbar("⚠️ Please enable notifications in Android Settings.")
+                                                }
+                                            }
+                                        }
+                                    }
                                 )
                                 ZenithTab.BLUEPRINT -> BlueprintScreen(
                                     state = state,

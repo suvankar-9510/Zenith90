@@ -45,14 +45,7 @@ fun ZenithLogo(
         modifier = modifier
             .size(sizeDp.dp)
             .clip(RoundedCornerShape((sizeDp * 0.28f).dp))
-            .background(
-                Brush.linearGradient(
-                    colors = listOf(
-                        Color(0xFF1E1E26),
-                        Color(0xFF121216)
-                    )
-                )
-            ),
+            .background(ZenithColors.ForestGreenPrimary),
         contentAlignment = Alignment.Center
     ) {
         Canvas(modifier = Modifier.size((sizeDp * 0.65f).dp)) {
@@ -74,8 +67,8 @@ fun ZenithLogo(
                 path = apexPath,
                 brush = Brush.verticalGradient(
                     colors = listOf(
-                        Color(0xFF84FAB0).copy(alpha = 0.30f),
-                        Color(0xFF8FD3F4).copy(alpha = 0.05f)
+                        ZenithColors.MintAccent.copy(alpha = 0.40f),
+                        Color.White.copy(alpha = 0.08f)
                     )
                 )
             )
@@ -91,8 +84,8 @@ fun ZenithLogo(
                 path = zPath,
                 brush = Brush.horizontalGradient(
                     colors = listOf(
-                        ZenithColors.AmberStart,
-                        ZenithColors.CoralEnd
+                        ZenithColors.MintAccent,
+                        Color.White
                     )
                 ),
                 style = Stroke(
@@ -101,9 +94,9 @@ fun ZenithLogo(
                 )
             )
 
-            // 3. Central Catalyst Star dot at Apex
+            // 3. Peak Star Anchor (North Star / Apex Point)
             drawCircle(
-                color = ZenithColors.SageStart,
+                color = Color.White,
                 radius = 3.dp.toPx(),
                 center = Offset(w * 0.5f, h * 0.08f)
             )
@@ -112,38 +105,41 @@ fun ZenithLogo(
 }
 
 @Composable
-fun GoogleBrandIcon(modifier: Modifier = Modifier, sizeDp: Int = 18) {
-    Canvas(modifier = modifier.size(sizeDp.dp)) {
+fun GoogleBrandIcon(sizeDp: Int = 20) {
+    Canvas(modifier = Modifier.size(sizeDp.dp)) {
         val w = size.width
         val h = size.height
         val cx = w / 2f
         val cy = h / 2f
-        val stroke = 2.4.dp.toPx()
+        val stroke = w * 0.18f
 
-        // Google 4-Color Circular Mark
+        // Blue top-right to bottom-right
         drawArc(
-            color = Color(0xFF4285F4), // Google Blue
+            color = Color(0xFF4285F4),
             startAngle = -45f,
             sweepAngle = 90f,
             useCenter = false,
             style = Stroke(stroke)
         )
+        // Green bottom
         drawArc(
-            color = Color(0xFF34A853), // Google Green
+            color = Color(0xFF34A853),
             startAngle = 45f,
             sweepAngle = 90f,
             useCenter = false,
             style = Stroke(stroke)
         )
+        // Yellow bottom-left
         drawArc(
-            color = Color(0xFFFBBC05), // Google Yellow
+            color = Color(0xFFFBBC05),
             startAngle = 135f,
             sweepAngle = 90f,
             useCenter = false,
             style = Stroke(stroke)
         )
+        // Red top-left
         drawArc(
-            color = Color(0xFFEA4335), // Google Red
+            color = Color(0xFFEA4335),
             startAngle = 225f,
             sweepAngle = 90f,
             useCenter = false,
@@ -152,6 +148,7 @@ fun GoogleBrandIcon(modifier: Modifier = Modifier, sizeDp: Int = 18) {
         // Center crossbar
         drawLine(
             color = Color(0xFF4285F4),
+            startAngle = 0f,
             start = Offset(cx, cy),
             end = Offset(w - stroke / 2, cy),
             strokeWidth = stroke,
@@ -181,7 +178,7 @@ fun AuthScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .background(ZenithColors.BotanicalBg)
             .statusBarsPadding()
             .navigationBarsPadding(),
         contentAlignment = Alignment.Center
@@ -190,7 +187,7 @@ fun AuthScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 22.dp, vertical = 20.dp),
+                .padding(horizontal = 24.dp, vertical = 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
@@ -199,18 +196,24 @@ fun AuthScreen(
             Spacer(Modifier.height(14.dp))
 
             Text(
-                text = "ZENITH 90",
-                style = MaterialTheme.typography.displayMedium,
-                letterSpacing = 2.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground
+                text = "Zenith90",
+                style = MaterialTheme.typography.headlineLarge,
+                fontWeight = FontWeight.ExtraBold,
+                color = ZenithColors.TextHeading
             )
 
             Text(
-                text = "90-DAY CIRCADIAN & DEEP WORK PROTOCOL",
-                style = MaterialTheme.typography.labelSmall,
-                letterSpacing = 1.2.sp,
-                color = MaterialTheme.colorScheme.primary
+                text = "Schedule Smarter, Work Better",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = ZenithColors.ForestGreenPrimary
+            )
+
+            Text(
+                text = "Handle your 90-day trajectory in a more convenient way",
+                style = MaterialTheme.typography.bodySmall,
+                color = ZenithColors.TextMuted,
+                modifier = Modifier.padding(top = 2.dp)
             )
 
             Spacer(Modifier.height(22.dp))
@@ -218,8 +221,8 @@ fun AuthScreen(
             // --- AUTH CARD ---
             Card(
                 shape = RoundedCornerShape(26.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                colors = CardDefaults.cardColors(containerColor = ZenithColors.BotanicalSurface),
+                border = BorderStroke(1.dp, ZenithColors.BotanicalBorder),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(
@@ -231,7 +234,7 @@ fun AuthScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(14.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .background(ZenithColors.BotanicalBg)
                             .padding(4.dp),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
@@ -258,7 +261,8 @@ fun AuthScreen(
                     Text(
                         text = if (isSignUpMode) "Begin 90-Day Transformation" else "Welcome Back, Scholar",
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
+                        fontWeight = FontWeight.Bold,
+                        color = ZenithColors.TextHeading
                     )
 
                     // Optional Name field (Sign Up Mode)
@@ -268,7 +272,7 @@ fun AuthScreen(
                             onValueChange = { name = it },
                             label = { Text("Full Name") },
                             placeholder = { Text("Suvankar Das") },
-                            leadingIcon = { Icon(Icons.Outlined.Person, contentDescription = null) },
+                            leadingIcon = { Icon(Icons.Outlined.Person, contentDescription = null, tint = ZenithColors.TextMuted) },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(14.dp),
@@ -282,7 +286,7 @@ fun AuthScreen(
                         onValueChange = { email = it },
                         label = { Text("Email Address") },
                         placeholder = { Text("scholar@domain.com") },
-                        leadingIcon = { Icon(Icons.Outlined.Email, contentDescription = null) },
+                        leadingIcon = { Icon(Icons.Outlined.Email, contentDescription = null, tint = ZenithColors.TextMuted) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(14.dp),
@@ -290,19 +294,20 @@ fun AuthScreen(
                             keyboardType = KeyboardType.Email,
                             imeAction = ImeAction.Next
                         )
-                    )
+                    }
 
                     // Password Field
                     OutlinedTextField(
                         value = password,
                         onValueChange = { password = it },
                         label = { Text("Password") },
-                        leadingIcon = { Icon(Icons.Outlined.Lock, contentDescription = null) },
+                        leadingIcon = { Icon(Icons.Outlined.Lock, contentDescription = null, tint = ZenithColors.TextMuted) },
                         trailingIcon = {
                             IconButton(onClick = { passwordVisible = !passwordVisible }) {
                                 Icon(
                                     imageVector = if (passwordVisible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
-                                    contentDescription = if (passwordVisible) "Hide password" else "Show password"
+                                    contentDescription = if (passwordVisible) "Hide password" else "Show password",
+                                    tint = ZenithColors.TextMuted
                                 )
                             }
                         },
@@ -333,7 +338,7 @@ fun AuthScreen(
                         Text(
                             text = authError,
                             style = MaterialTheme.typography.bodyMedium,
-                            color = ZenithColors.CoralEnd
+                            color = ZenithColors.PastelRoseText
                         )
                     }
 
@@ -352,23 +357,25 @@ fun AuthScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(52.dp),
-                        shape = RoundedCornerShape(16.dp)
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = ZenithColors.ForestGreenPrimary)
                     ) {
                         if (isLoading) {
                             CircularProgressIndicator(
                                 modifier = Modifier.size(20.dp),
-                                color = MaterialTheme.colorScheme.onPrimary,
+                                color = Color.White,
                                 strokeWidth = 2.dp
                             )
                             Spacer(Modifier.width(10.dp))
-                            Text("AUTHENTICATING...", style = MaterialTheme.typography.labelSmall)
+                            Text("AUTHENTICATING...", style = MaterialTheme.typography.labelSmall, color = Color.White)
                         } else {
-                            Icon(Icons.Outlined.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Icon(Icons.Outlined.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp), tint = Color.White)
                             Spacer(Modifier.width(8.dp))
                             Text(
-                                text = if (isSignUpMode) "CREATE ACCOUNT" else "SIGN IN",
+                                text = if (isSignUpMode) "CREATE ACCOUNT" else "LET'S GO",
                                 style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
                             )
                         }
                     }
@@ -378,13 +385,13 @@ fun AuthScreen(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        HorizontalDivider(modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.outline)
+                        HorizontalDivider(modifier = Modifier.weight(1f), color = ZenithColors.BotanicalBorder)
                         Text(
                             text = "  OR CONTINUE WITH  ",
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = ZenithColors.TextMuted
                         )
-                        HorizontalDivider(modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.outline)
+                        HorizontalDivider(modifier = Modifier.weight(1f), color = ZenithColors.BotanicalBorder)
                     }
 
                     // Google Sign-In Button
@@ -396,8 +403,8 @@ fun AuthScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(50.dp),
-                        shape = RoundedCornerShape(14.dp),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                        shape = RoundedCornerShape(16.dp),
+                        border = BorderStroke(1.dp, ZenithColors.BotanicalBorder)
                     ) {
                         GoogleBrandIcon(sizeDp = 18)
                         Spacer(Modifier.width(10.dp))
@@ -405,7 +412,7 @@ fun AuthScreen(
                             text = "Continue with Google",
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurface
+                            color = ZenithColors.TextHeading
                         )
                     }
 
@@ -418,12 +425,16 @@ fun AuthScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(50.dp),
-                        shape = RoundedCornerShape(14.dp)
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = ZenithColors.BotanicalBg,
+                            contentColor = ZenithColors.TextHeading
+                        )
                     ) {
                         Icon(
                             Icons.Outlined.Bolt,
                             contentDescription = null,
-                            tint = ZenithColors.AmberStart,
+                            tint = ZenithColors.PastelAmberText,
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(Modifier.width(8.dp))
@@ -442,7 +453,7 @@ fun AuthScreen(
             Text(
                 text = "Local Room SQLite active • Auto-syncs to Cloud Firestore when connected",
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = ZenithColors.TextMuted
             )
         }
     }
@@ -458,8 +469,8 @@ private fun TabButton(
     Button(
         onClick = onClick,
         colors = ButtonDefaults.buttonColors(
-            containerColor = if (isSelected) MaterialTheme.colorScheme.surface else Color.Transparent,
-            contentColor = if (isSelected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+            containerColor = if (isSelected) ZenithColors.BotanicalSurface else Color.Transparent,
+            contentColor = if (isSelected) ZenithColors.ForestGreenPrimary else ZenithColors.TextMuted
         ),
         shape = RoundedCornerShape(10.dp),
         elevation = if (isSelected) ButtonDefaults.buttonElevation(defaultElevation = 2.dp) else ButtonDefaults.buttonElevation(),
