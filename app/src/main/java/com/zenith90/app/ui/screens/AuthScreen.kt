@@ -148,7 +148,6 @@ fun GoogleBrandIcon(sizeDp: Int = 20) {
         // Center crossbar
         drawLine(
             color = Color(0xFF4285F4),
-            startAngle = 0f,
             start = Offset(cx, cy),
             end = Offset(w - stroke / 2, cy),
             strokeWidth = stroke,
